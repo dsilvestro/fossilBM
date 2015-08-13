@@ -12,15 +12,15 @@ update_multiplier_proposal <- function(i,d){
 
 
 fN<-function(xa, xb, vpa, vpb, sigma2) {
-  #the normal density. Sigma2 is the variance. Same as log(dnorm(xa-xb, 0, sqrt(sigma * sigma * (vpa + vpb))))
-  return( dnorm((xa-xb),mean=0,sd= sqrt(sigma2 * (vpa + vpb)), log=T) )
-  #return((-(xa - xb)^2 / (2 * sigma2 * (vpa + vpb)) - log(sqrt(2 * pi * sigma2 * (vpa + vpb)))));
+	#the normal density. Sigma2 is the variance. Same as log(dnorm(xa-xb, 0, sqrt(sigma * sigma * (vpa + vpb))))
+	return( dnorm((xa-xb),mean=0,sd= sqrt(sigma2 * (vpa + vpb)), log=T) )
+	#return((-(xa - xb)^2 / (2 * sigma2 * (vpa + vpb)) - log(sqrt(2 * pi * sigma2 * (vpa + vpb)))));
 }
 
 fN2<-function(xa, xb, vpa, vpb, sigma2, anc) {
-  #same as fN but with a known ancestor instead of xa-xb, see Joe's book eqn 23.10 (some mistakes in the denominator though in his equation)
-  return(dnorm(xa, mean=anc, sd= sqrt(vpa*sigma2),log=T) + dnorm(xb, mean=anc, sd= sqrt(vpb*sigma2),log=T)  )
-  #return(-(((xa - anc)^2 / vpa) + ((xb - anc)^2 / vpb)) / (2 * sigma2) - log(sqrt(2 * pi * sigma2 * (vpa + vpb))));
+	#same as fN but with a known ancestor instead of xa-xb, see Joe's book eqn 23.10 (some mistakes in the denominator though in his equation)
+	return(dnorm(xa, mean=anc, sd= sqrt(vpa*sigma2),log=T) + dnorm(xb, mean=anc, sd= sqrt(vpb*sigma2),log=T)  )
+	#return(-(((xa - anc)^2 / vpa) + ((xb - anc)^2 / vpb)) / (2 * sigma2) - log(sqrt(2 * pi * sigma2 * (vpa + vpb))));
 }
 
 
@@ -115,7 +115,7 @@ runGibbs <- function(sigma2, vector_tip_root_nodes_values) {
 	
 	vec_values = vector_tip_root_nodes_values
         # loop over Johnatan's tbl from most recent to root
-        for (i in dim(D)[1]:1){
+        for (i in dim(D)[1]:2){
 	#for (rep in 1:20){
 	#	i = sample(dim(D)[1])[1]
 	      	anc_ind <- D[i,1];
@@ -131,6 +131,7 @@ runGibbs <- function(sigma2, vector_tip_root_nodes_values) {
 		calibrated_prior_s2 = prior_tbl[which(rownames(prior_tbl)==anc_ind),2]
 
 		desc_lik = get_joint_mu_s2(a, (vpa+S_vec[a_ind])*sigma2, b, (vpb+S_vec[b_ind])*sigma2)
+		prior_prm = prior_tbl[which(rownames(prior_tbl)==anc_ind),]
 		
 		# lik from (stem) ancestral state
 		if (i>1){
@@ -149,16 +150,15 @@ runGibbs <- function(sigma2, vector_tip_root_nodes_values) {
 			#get_joint_mu_s2(calibrated_prior_mu,calibrated_prior_s2,stem_val,(stem_brl+S_vec[stem_ind]) *sigma2)
 			
 			lik_val = get_joint_mu_s2(stem_lik[1],stem_lik[2],desc_lik[1],desc_lik[2])
-			prior_prm = prior_tbl[which(rownames(prior_tbl)==anc_ind),]
 		}
 		
-		else { # ROOT
-			lik_val = desc_lik
-			mu_0= anc
-			s2_0= S_vec[anc_ind]
-			prior_prm = prior_tbl[which(rownames(prior_tbl)==anc_ind),]	
-			prior_prm = get_joint_mu_s2(mu_0,s2_0,prior_prm[1],prior_prm[2])			
-		}
+		# MH update of root
+		#else { # ROOT
+		#	mu_0= prior_prm[1] #anc 
+		#	s2_0= prior_prm[2]*S_vec[anc_ind]*sigma2
+		#	
+		#	lik_val =  get_joint_mu_s2(mu_0,s2_0,desc_lik[1],desc_lik[2])
+		#}
 		
 		
 		
@@ -168,16 +168,14 @@ runGibbs <- function(sigma2, vector_tip_root_nodes_values) {
 		#	prior_prm = c(0,100)
 		#}
 		
-		
-		#print(c(i,prior_prm[1],prior_prm[2]))
-		
-		if (i>=1){ 
-			post_prm= get_joint_mu_s2(lik_val[1],lik_val[2], prior_prm[1], prior_prm[2])
+		if (i>1){ 
+			post_prm= get_joint_mu_s2(lik_val[1],lik_val[2],prior_prm[1], prior_prm[2])
 			vec_values[anc_ind] = rnorm(1, mean=post_prm[1], sd=sqrt(post_prm[2]))
 		}
-		# else{
+		# MH update of root
+		#else{
 		# 	vec_values[anc_ind] = rnorm(1, mean=prior_prm[1], sd=sqrt(prior_prm[2]))
-		# }
+		#}
          }
          #print(condvec)
          return(vec_values[D[,1]] )
@@ -245,20 +243,24 @@ mcmc.gibbs4 <- function (tree, x, ngen = 100000, control = list(), gibbs_sampler
         gibbs=0
 	hastings=0
 	    
-	if (i%%1000 == 0) {print (round(c(i,L,sig2),2))}
+	if (i%%1000 == 0) {print (round(c(i,L,sig2,a),2))}
 	    
         j <- (i - 1)%%(tree$Nnode + 1)
         #if (j == 0) {
 	rr= runif(1,0,1)
 	if (rr<update_sig_freq) {
 		#sig2.prime <-  abs(sig2 + rnorm(n = 1, sd = sqrt(con$prop[j + 1]))) 
-		sig2_update <-  update_multiplier_proposal(sig2,1.2)
-		sig2.prime = sig2_update[1]
-		hastings = sig2_update[2]
+		if (runif(1,0,1)>0.5){
+			sig2_update <-  update_multiplier_proposal(sig2,1.2)
+			sig2.prime = sig2_update[1]
+			hastings = sig2_update[2]			
+		}
+		else{
+			a.prime <- a + rnorm(n = 1, sd = 0.5) #sqrt(con$prop[j + 1]))
+		}
     	}
          else {   # ANC STATES
 		if (gibbs_sampler==F){
-			a.prime <- a + rnorm(n = 1, sd = 0.5) #sqrt(con$prop[j + 1]))
 			k <- j - 1
 			y.prime <- y
 			y.prime[k] <- y[k] + rnorm(n = 1, sd = 0.5) #sqrt(con$prop[j + 1]))	
@@ -311,7 +313,7 @@ message("Done.")
 
 
 tree<-pbtree(n=20, scale=1);
-full_data<-fastBM(tree, sig2=0.5, a=0, internal=T);
+full_data<-fastBM(tree, sig2=0.4, a=0, internal=T);
 data <- full_data[names(full_data) %in% tree$tip.label]
 true_anc = full_data[names(full_data) %in% tree$edge]
 D <- build_table(tree, length(tree$tip.label),data)
@@ -331,7 +333,7 @@ mcmc.gibbs4(tree, data, 25000,gibbs_sampler=F,useVCV=F,logfile=logfile2,update_s
 
 # run Gibbs likelihood
 logfile3 = "/Users/daniele/Desktop/logGibbs.log"
-mcmc.gibbs4(tree, data, 25000,gibbs_sampler=T,useVCV=F,logfile=logfile3,update_sig_freq=0.75)
+mcmc.gibbs4(tree, data, 15000,gibbs_sampler=T,useVCV=F,logfile=logfile3,update_sig_freq=0.75)
 
 plot_traitgram <-function(logfile,add=F,col="black"){
 	out_tbl = read.table(logfile,header=T)
@@ -347,7 +349,7 @@ plot_traitgram <-function(logfile,add=F,col="black"){
 
 phenogram(tree, full_data,ylim=c(-2,2),add=F)	
 
-plot_traitgram(logfile1,add=T,col="grey50")
+plot_traitgram(logfile1,add=F,col="grey50")
 plot_traitgram(logfile2,add=T,col="red")
 plot_traitgram(logfile3,add=T,col="blue")
 
