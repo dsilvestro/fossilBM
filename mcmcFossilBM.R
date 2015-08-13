@@ -1,5 +1,10 @@
-require(phytools);
-library(diversitree)
+#!/usr/bin/Rscript
+# version 20150713
+
+arg <- commandArgs(trailingOnly=TRUE)
+
+require(phytools)
+require(diversitree)
 
 update_multiplier_proposal <- function(i,d){
 	u = runif(1,0,1)
@@ -24,7 +29,7 @@ fN2<-function(xa, xb, vpa, vpb, sigma2, anc) {
 }
 
 
-newlnLike<-function(tree, vector_tip_root_nodes_values, sigma2) {
+newlnLike<-function(tree, vector_tip_root_nodes_values, sigma2,D,S_vec) {
   vec_values = vector_tip_root_nodes_values
 
   #conditional likelihood vectors
@@ -100,6 +105,16 @@ calc_prior_dist_root_calibration <- function (D,sigma2){
 }
 
 
+get_calibration_tbl <- function (D,root_calibration){
+	calibration_tbl =NULL	
+	for (i in 1:dim(D)[1]){
+		calibration_tbl = rbind(calibration_tbl,c(0,100))
+	}	
+	row.names(calibration_tbl)=D[,1]
+	calibration_tbl[1,] = root_calibration
+	return(calibration_tbl)
+}
+
 ################ RUN GIBBS FUNCTIONS
 get_joint_mu_s2 <- function (mu_f,s2_f,mu_g,s2_g){
 	s2_fg = (s2_f*s2_g)/(s2_f+s2_g)
@@ -107,11 +122,9 @@ get_joint_mu_s2 <- function (mu_f,s2_f,mu_g,s2_g){
 	return(c(mu_fg,s2_fg))
 }
 
-runGibbs <- function(sigma2, vector_tip_root_nodes_values) {
+runGibbs <- function(sigma2, vector_tip_root_nodes_values,D,S_vec,prior_tbl) {
 	
-	prior_tbl = calc_prior_dist_root_calibration(D,sigma2)
-	prior_tbl[2:dim(prior_tbl)[1],1]=0
-	prior_tbl[2:dim(prior_tbl)[1],2]=100	
+	#prior_tbl = calc_prior_dist_root_calibration(D,sigma2)
 	
 	vec_values = vector_tip_root_nodes_values
         # loop over Johnatan's tbl from most recent to root
@@ -184,10 +197,9 @@ runGibbs <- function(sigma2, vector_tip_root_nodes_values) {
 
 
 ################################## START MCMC ###################################
-######################################################################
-mcmc.gibbs4 <- function (tree, x, ngen = 100000, control = list(), gibbs_sampler=T,useVCV=F, sample=100,logfile="log",update_sig_freq=0.5) 
+mcmc.gibbs4 <- function (tree, x, D, prior_tbl,true_anc,S_vec, ngen = 100000, control = list(), gibbs_sampler=T,useVCV=F, sample=100,logfile="log",update_sig_freq=0.5) 
 {
-    cat(c("it", "posterior","likelihood","prior", "sig2", "root", D[-1,1],"\n"),sep="\t", file=logfile, append=F)
+    cat(c("it", "posterior","likelihood","prior", "sig2", "root", D[-1,1], paste("re_", D[,1],sep=""),"\n"),sep="\t", file=logfile, append=F)
     
     temp <- phyl.vcv(as.matrix(x), vcv(tree), 1)
     sig2 <- 0.5 #temp$R[1, 1]
@@ -206,7 +218,7 @@ mcmc.gibbs4 <- function (tree, x, ngen = 100000, control = list(), gibbs_sampler
     else{
 	    likelihood <- function(C, invC, detC, x, sig2, a, y) {
 		    vector_tip_root_nodes_values = c(x, a, y)
-		newlnLike(tree, vector_tip_root_nodes_values, sig2)
+		newlnLike(tree, vector_tip_root_nodes_values, sig2,D,S_vec)
 	    }    	
     }
 
@@ -214,7 +226,7 @@ mcmc.gibbs4 <- function (tree, x, ngen = 100000, control = list(), gibbs_sampler
     log.prior <- function(sig2, a, y) {
 	prior_sig2 <- dexp(sig2, rate = 1/100, log = TRUE) 
 	# + sum(dnorm(c(a, y), mean = pr.mean[2:length(pr.mean)], sd = sqrt(pr.var[1 + 1:tree$Nnode]), log = TRUE))
-	prior_tbl = calc_prior_dist_root_calibration(D,sig2)
+	# prior_tbl = calc_prior_dist_root_calibration(D,sig2)
 	prior_root = sum(dnorm(c(a), mean = prior_tbl[,1], sd = prior_tbl[,2], log = T))
 	prior_anc = sum(dnorm(c(a, y), mean = 0, sd = 100, log = T))
     	return(prior_sig2+prior_root+prior_anc)
@@ -267,7 +279,7 @@ mcmc.gibbs4 <- function (tree, x, ngen = 100000, control = list(), gibbs_sampler
 		} 
 		else {
 			vector_tip_root_nodes_values = c(x, a, y)
-			y_temp = runGibbs(sig2, vector_tip_root_nodes_values)
+			y_temp = runGibbs(sig2, vector_tip_root_nodes_values,D,S_vec,prior_tbl)
 			a.prime= y_temp[1]
 			y.prime= y_temp[-1]
 			gibbs=1			
@@ -292,64 +304,84 @@ mcmc.gibbs4 <- function (tree, x, ngen = 100000, control = list(), gibbs_sampler
  
  
      if (i%%sample == 0) {
-	    cat(c(i,L+Pr, L,Pr, sig2, a, y,"\n"),sep="\t", file=logfile, append=T)
+	    rel_err =  (c(a, y) - true_anc)
+	    cat(c(i,L+Pr, L,Pr, sig2, a, y, rel_err, "\n"),sep="\t", file=logfile, append=T)
  
     }
     
 }
-message("Done.")
 }
-
-
-
 ################################## END   MCMC ###################################
 
-### LOG rel err
-# sig2 in file name
-# n tips in file name
-# method in file name
-# add ags for sig2, tips
 
-
-
-tree<-pbtree(n=20, scale=1);
-full_data<-fastBM(tree, sig2=0.4, a=0, internal=T);
-data <- full_data[names(full_data) %in% tree$tip.label]
-true_anc = full_data[names(full_data) %in% tree$edge]
-D <- build_table(tree, length(tree$tip.label),data)
-S_vec <- get_S_vec(D) # vector with extra-variances
-BR= branching.times(tree) # sorted from root to most recent
-dist_from_root = max(BR)-BR
-root_calibration =c(0,100)
-
-
-# run VCV likelihood
-logfile1 = "/Users/daniele/Desktop/logVCV.log"
-mcmc.gibbs4(tree, data, 25000,gibbs_sampler=F,useVCV=T,logfile=logfile1,update_sig_freq=0.1)
-
-# run MH likelihood
-logfile2 = "/Users/daniele/Desktop/logMH.log"
-mcmc.gibbs4(tree, data, 25000,gibbs_sampler=F,useVCV=F,logfile=logfile2,update_sig_freq=0.1)
-
-# run Gibbs likelihood
-logfile3 = "/Users/daniele/Desktop/logGibbs.log"
-mcmc.gibbs4(tree, data, 15000,gibbs_sampler=T,useVCV=F,logfile=logfile3,update_sig_freq=0.75)
-
-plot_traitgram <-function(logfile,add=F,col="black"){
-	out_tbl = read.table(logfile,header=T)
-	post_anc_states=c()
-	for (i in 6:dim(out_tbl)[2]){
-		 val = mean(out_tbl[50:dim(out_tbl)[1],i])
-		 names(val) = length(post_anc_states)+length(data)+1
-		 post_anc_states=append(post_anc_states,val)
-	}
-	print (post_anc_states[1])
-	phenogram(tree, c(data, post_anc_states),ylim=c(-2,2),add=add,col=col)	
+############################### SIMULATE DATA #######################################
+sim_data <- function(ntips=20,s2=0.2){
+	tree<-pbtree(n=ntips, scale=1);
+	full_data<-fastBM(tree, sig2=s2, a=0, internal=T);
+	return(c(tree,full_data))
 }
 
-phenogram(tree, full_data,ylim=c(-2,2),add=F)	
 
-plot_traitgram(logfile1,add=F,col="grey50")
-plot_traitgram(logfile2,add=T,col="red")
-plot_traitgram(logfile3,add=T,col="blue")
+
+start_MCMC <- function(w_dir,sim_n,sig2,ntips,root_calibration = c(0,100), plot_res = F){
+	setwd(w_dir)
+	S = sim_data()
+	tree= S[[1]]
+	data <- S[[2]][names(S[[2]]) %in% tree$tip.label]
+	true_anc = S[[2]][names(S[[2]]) %in% tree$edge]
+	D <- build_table(tree, length(tree$tip.label),data)
+	S_vec <- get_S_vec(D) # vector with extra-variances
+	BR= branching.times(tree) # sorted from root to most recent
+	dist_from_root = max(BR)-BR
+
+	### LOG rel err
+	prior_tbl = get_calibration_tbl(D,root_calibration)
+
+	# run VCV likelihood
+	logfile1 = sprintf("sim_%s_s2_%s_n_%s_VCV.log", sim_n, sig2, ntips)
+	mcmc.gibbs4(tree, data, D, prior_tbl, true_anc,S_vec, ngen=150000,gibbs_sampler=F,useVCV=T,logfile=logfile1,update_sig_freq=0.15,sample=300)
+
+	# run MH likelihood
+	logfile2 = sprintf("sim_%s_s2_%s_n_%s_MH.log", sim_n, sig2, ntips)
+	mcmc.gibbs4(tree, data, D, prior_tbl, true_anc,S_vec, ngen=150000,gibbs_sampler=F,useVCV=F,logfile=logfile2,update_sig_freq=0.15,sample=300)
+
+	# run Gibbs likelihood
+	logfile3 = sprintf("sim_%s_s2_%s_n_%s_Gibbs.log", sim_n, sig2, ntips)
+	mcmc.gibbs4(tree, data, D, prior_tbl, true_anc,S_vec, ngen= 50000,gibbs_sampler=T,useVCV=F,logfile=logfile3,update_sig_freq=0.75,sample=100)
+
+	if (plot_res==T){
+		plot_traitgram <-function(logfile,add=F,col="black"){
+			out_tbl = read.table(logfile,header=T)
+			post_anc_states=c()
+			for (i in 6:dim(out_tbl)[2]){
+				 val = mean(out_tbl[250:dim(out_tbl)[1],i])
+				 names(val) = length(post_anc_states)+length(data)+1
+				 post_anc_states=append(post_anc_states,val)
+			}
+			print (post_anc_states[1])
+			phenogram(tree, c(data, post_anc_states),ylim=c(-2,2),add=add,col=col)	
+		}
+
+		#phenogram(tree, full_data,ylim=c(-2,2),add=F)	
+		plot_traitgram(logfile1,add=F,col="grey50")
+		plot_traitgram(logfile2,add=T,col="red")
+		plot_traitgram(logfile3,add=T,col="blue")
+	}
+}
+
+
+
+
+
+
+## GLOBAL
+w_dir   = as.character(arg[1])   # working dir
+sim_n   = as.integer(arg[2])     # simulation number
+sig2    = as.double(arg[2])      # BM rate
+ntips   = as.integer(arg[3])     # number of tips
+#plot_res= F
+#root_calibration =c(0,100)
+
+start_MCMC(w_dir, sim_n, sig2, ntips)
+##
 
