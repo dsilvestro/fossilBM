@@ -201,13 +201,13 @@ mcmc.gibbs4 <- function (tree, x, D, prior_tbl,true_anc,S_vec, ngen = 100000, co
 {
     cat(c("it", "posterior","likelihood","prior", "sig2", "root", D[-1,1], paste("re_", D[,1],sep=""),"\n"),sep="\t", file=logfile, append=F)
     
-    temp <- phyl.vcv(as.matrix(x), vcv(tree), 1)
     sig2 <- 0.5 #temp$R[1, 1]
-    a <- temp$alpha
-    y <- rep(a, tree$Nnode - 1)
+    a <- 0
+    y <- rep(0, tree$Nnode - 1)
     
     # lik function
     if (useVCV ==T){
+	    temp <- phyl.vcv(as.matrix(x), vcv(tree), 1)
 	    likelihood <- function(C, invC, detC, x, sig2, a, y) {
 	        z <- c(x, y) - a
 	        logLik <- -z %*% invC %*% z/(2 * sig2) - nrow(C) * log(2 * 
@@ -255,7 +255,7 @@ mcmc.gibbs4 <- function (tree, x, D, prior_tbl,true_anc,S_vec, ngen = 100000, co
         gibbs=0
 	hastings=0
 	    
-	if (i%%1000 == 0) {print (round(c(i,L,sig2,a),2))}
+	if (i%%print_f == 0) {print (round(c(i,L,sig2,a),2))}
 	    
         j <- (i - 1)%%(tree$Nnode + 1)
         #if (j == 0) {
@@ -316,38 +316,41 @@ mcmc.gibbs4 <- function (tree, x, D, prior_tbl,true_anc,S_vec, ngen = 100000, co
 
 ############################### SIMULATE DATA #######################################
 sim_data <- function(ntips=20,s2=0.2){
-	tree<-pbtree(n=ntips, scale=1);
+	print("Simulating trees")
+	tree<-pbtree(n=ntips, scale=100);
+	print("Simulating data")
 	full_data<-fastBM(tree, sig2=s2, a=0, internal=T);
 	return(c(tree,full_data))
 }
 
 
 
-start_MCMC <- function(w_dir,sim_n,sig2,ntips,root_calibration = c(0,100), plot_res = F){
+start_MCMC <- function(w_dir,sim_n,sig2,ntips,ngenerations,sampling_f,root_calibration = c(0,100), plot_res = F){
 	setwd(w_dir)
-	S = sim_data()
+	S = sim_data(ntips=ntips,s2=sig2)
 	tree= S[[1]]
 	data <- S[[2]][names(S[[2]]) %in% tree$tip.label]
 	true_anc = S[[2]][names(S[[2]]) %in% tree$edge]
-	D <- build_table(tree, length(tree$tip.label),data)
+	D <- build_table(tree, ntips,data)
 	S_vec <- get_S_vec(D) # vector with extra-variances
 	BR= branching.times(tree) # sorted from root to most recent
 	dist_from_root = max(BR)-BR
 
 	### LOG rel err
 	prior_tbl = get_calibration_tbl(D,root_calibration)
-
+	
+	print("Starting MCMC...")
 	# run VCV likelihood
 	logfile1 = sprintf("sim_%s_s2_%s_n_%s_VCV.log", sim_n, sig2, ntips)
-	mcmc.gibbs4(tree, data, D, prior_tbl, true_anc,S_vec, ngen=150000,gibbs_sampler=F,useVCV=T,logfile=logfile1,update_sig_freq=0.15,sample=300)
-
+	mcmc.gibbs4(tree, data, D, prior_tbl, true_anc,S_vec, ngen=ngenerations,gibbs_sampler=F,useVCV=T,logfile=logfile1,update_sig_freq=0.15,sample=sampling_f)
+        
 	# run MH likelihood
 	logfile2 = sprintf("sim_%s_s2_%s_n_%s_MH.log", sim_n, sig2, ntips)
-	mcmc.gibbs4(tree, data, D, prior_tbl, true_anc,S_vec, ngen=150000,gibbs_sampler=F,useVCV=F,logfile=logfile2,update_sig_freq=0.15,sample=300)
-
+	mcmc.gibbs4(tree, data, D, prior_tbl, true_anc,S_vec, ngen=ngenerations,gibbs_sampler=F,useVCV=F,logfile=logfile2,update_sig_freq=0.15,sample=sampling_f)
+        
 	# run Gibbs likelihood
 	logfile3 = sprintf("sim_%s_s2_%s_n_%s_Gibbs.log", sim_n, sig2, ntips)
-	mcmc.gibbs4(tree, data, D, prior_tbl, true_anc,S_vec, ngen= 50000,gibbs_sampler=T,useVCV=F,logfile=logfile3,update_sig_freq=0.75,sample=100)
+	mcmc.gibbs4(tree, data, D, prior_tbl, true_anc,S_vec, ngen= 250000,gibbs_sampler=T,useVCV=F,logfile=logfile3,update_sig_freq=0.75,sample=500)
 
 	if (plot_res==T){
 		plot_traitgram <-function(logfile,add=F,col="black"){
@@ -371,17 +374,22 @@ start_MCMC <- function(w_dir,sim_n,sig2,ntips,root_calibration = c(0,100), plot_
 
 
 
-
+print_f=10000
 
 
 ## GLOBAL
 w_dir   = as.character(arg[1])   # working dir
 sim_n   = as.integer(arg[2])     # simulation number
-sig2    = as.double(arg[2])      # BM rate
-ntips   = as.integer(arg[3])     # number of tips
+sig2    = as.double(arg[3])      # BM rate
+ntips   = as.integer(arg[4])     # number of tips
+ngen    = as.integer(arg[5])     # number of tips
+sample  = as.integer(arg[6])     # number of tips
 #plot_res= F
 #root_calibration =c(0,100)
 
-start_MCMC(w_dir, sim_n, sig2, ntips)
+start_MCMC(w_dir, sim_n, sig2, ntips,ngen,sample)
+
+#start_MCMC("/Users/daniele/Documents/projects/fossilBM/", 1, 0.2, ntips=10000,ngenerations=50000,sampling_f=10)
+
 ##
 
