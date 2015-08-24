@@ -37,19 +37,37 @@ newlnLike<-function(tree, vector_tip_root_nodes_values, sigma2,D,S_vec) {
 
   # loop over Johnatan's tbl (REVERSE ORDER)
   for (i in dim(D)[1]:1){
-	anc_ind <- D[i,1];
-	a_ind   <- D[i,2];  # index of descendants
-	b_ind   <- D[i,3];  # index of descendants
-	vpa     <- D[i,4];  # br length
-	vpb     <- D[i,5];  # br length
-	anc = vec_values[anc_ind]
-	a = vec_values[a_ind]
-	b = vec_values[b_ind]
-	condvec[anc_ind] = fN2(a,b, vpa+S_vec[a_ind], vpb+S_vec[b_ind], sigma2, anc) # + condvec[a_ind] + condvec[b_ind];
-	#print(c(i, anc_ind))
-	
+  	anc_ind <- D[i,1];
+  	a_ind   <- D[i,2];  # index of descendants
+  	b_ind   <- D[i,3];  # index of descendants
+  	vpa     <- D[i,4];  # br length
+  	vpb     <- D[i,5];  # br length
+  	anc = vec_values[anc_ind]
+  	a = vec_values[a_ind]
+  	b = vec_values[b_ind]
+  	condvec[anc_ind] = fN2(a,b, vpa+S_vec[a_ind], vpb+S_vec[b_ind], sigma2, anc) # + condvec[a_ind] + condvec[b_ind];
+  	#print(c(i, anc_ind))
    }
-   lik = sum(condvec) + fN(anc,anc, S_vec[anc_ind], 0, sigma2) 
+   lik = sum(condvec) #+ fN(anc,anc, S_vec[anc_ind], 0, sigma2) 
+   
+  # anc_ind_v <- D[,1]
+  # a_ind_v   <- D[,2]
+  # b_ind_v   <- D[,3]
+  # vpa_v     <- D[,4]
+  # vpb_v     <- D[,5]
+  # 
+  # anc_v <- vec_values[anc_ind_v]
+  # a_v   <- vec_values[a_ind_v]
+  # b_v   <- vec_values[b_ind_v]
+  # 
+  # L1 = dnorm(a_v, mean=anc_v, sd= sqrt(vpa_v*sigma2),log=T)
+  # L2 = dnorm(b_v, mean=anc_v, sd= sqrt(vpb_v*sigma2),log=T)  
+  #  
+  # L = sum(L1+L2)
+   #print(c(L,lik))
+   
+   
+   
    #print(condvec)
    return(lik) 
   
@@ -317,22 +335,24 @@ mcmc.gibbs4 <- function (tree, x, D, prior_tbl,true_anc,S_vec, ngen = 100000, co
 ############################### SIMULATE DATA #######################################
 sim_data <- function(ntips=20,s2=0.2){
 	print("Simulating trees")
-	tree<-pbtree(n=ntips, scale=100);
+	tree<-pbtree(n=ntips, scale=1);
 	print("Simulating data")
 	full_data<-fastBM(tree, sig2=s2, a=0, internal=T);
 	return(c(tree,full_data))
 }
 
+get_time <- function(){
+	return(sum(as.numeric(strsplit(format(Sys.time(), "%X"),":")[[1]])*c(3600,60,1)))
+}
 
-
-start_MCMC <- function(w_dir,sim_n,sig2,ntips,ngenerations,sampling_f,root_calibration = c(0,100), plot_res = F){
+start_MCMC <- function(w_dir,sim_n,sig2,ntips,ngenerations,sampling_f,nGibbs_gen,Gibbs_sample,root_calibration = c(0,100), plot_res = F){
 	setwd(w_dir)
 	S = sim_data(ntips=ntips,s2=sig2)
 	tree= S[[1]]
 	data <- S[[2]][names(S[[2]]) %in% tree$tip.label]
 	true_anc = S[[2]][names(S[[2]]) %in% tree$edge]
 	D <- build_table(tree, ntips,data)
-	S_vec <- get_S_vec(D) # vector with extra-variances
+	S_vec <- get_S_vec(D)*0 # vector with extra-variances
 	BR= branching.times(tree) # sorted from root to most recent
 	dist_from_root = max(BR)-BR
 
@@ -340,17 +360,25 @@ start_MCMC <- function(w_dir,sim_n,sig2,ntips,ngenerations,sampling_f,root_calib
 	prior_tbl = get_calibration_tbl(D,root_calibration)
 	
 	print("Starting MCMC...")
+	time_file = sprintf("sim_%s_s2_%s_n_%s_time.txt", sim_n, sig2, ntips)
+
 	# run VCV likelihood
+	t1 = get_time()
 	logfile1 = sprintf("sim_%s_s2_%s_n_%s_VCV.log", sim_n, sig2, ntips)
-	mcmc.gibbs4(tree, data, D, prior_tbl, true_anc,S_vec, ngen=ngenerations,gibbs_sampler=F,useVCV=T,logfile=logfile1,update_sig_freq=0.15,sample=sampling_f)
-        
-	# run MH likelihood
-	logfile2 = sprintf("sim_%s_s2_%s_n_%s_MH.log", sim_n, sig2, ntips)
-	mcmc.gibbs4(tree, data, D, prior_tbl, true_anc,S_vec, ngen=ngenerations,gibbs_sampler=F,useVCV=F,logfile=logfile2,update_sig_freq=0.15,sample=sampling_f)
+	mcmc.gibbs4(tree, data, D, prior_tbl, true_anc,S_vec, ngen=ngenerations,gibbs_sampler=F,useVCV=T,logfile=logfile1,update_sig_freq=0.15,sample=sampling_f)        
+	cat("Time VCV:", get_time() - t1, sep="\t", file = time_file)
+	#_ 
+	#_ # run MH likelihood
+	#_ t1 = get_time()
+	#_ logfile2 = sprintf("sim_%s_s2_%s_n_%s_MH.log", sim_n, sig2, ntips)
+	#_ mcmc.gibbs4(tree, data, D, prior_tbl, true_anc,S_vec, ngen=ngenerations,gibbs_sampler=F,useVCV=F,logfile=logfile2,update_sig_freq=0.15,sample=sampling_f)
+	#_ cat("\nTime MH:", get_time() - t1, sep="\t", file = time_file,append=T)
         
 	# run Gibbs likelihood
+	t1 = get_time()
 	logfile3 = sprintf("sim_%s_s2_%s_n_%s_Gibbs.log", sim_n, sig2, ntips)
-	mcmc.gibbs4(tree, data, D, prior_tbl, true_anc,S_vec, ngen= 250000,gibbs_sampler=T,useVCV=F,logfile=logfile3,update_sig_freq=0.75,sample=500)
+	mcmc.gibbs4(tree, data, D, prior_tbl, true_anc,S_vec, ngen= nGibbs_gen,gibbs_sampler=T,useVCV=F,logfile=logfile3,update_sig_freq=0.75,sample=Gibbs_sample)
+	cat("\nTime Gibbs:", get_time() - t1, sep="\t", file = time_file,append=T)
 
 	if (plot_res==T){
 		plot_traitgram <-function(logfile,add=F,col="black"){
@@ -374,22 +402,47 @@ start_MCMC <- function(w_dir,sim_n,sig2,ntips,ngenerations,sampling_f,root_calib
 
 
 
-print_f=10000
+print_f=1000
 
 
 ## GLOBAL
-w_dir   = as.character(arg[1])   # working dir
-sim_n   = as.integer(arg[2])     # simulation number
-sig2    = as.double(arg[3])      # BM rate
-ntips   = as.integer(arg[4])     # number of tips
-ngen    = as.integer(arg[5])     # number of tips
-sample  = as.integer(arg[6])     # number of tips
+w_dir         = as.character(arg[1])   # working dir
+sim_n         = as.integer(arg[2])     # simulation number
+sig2          = as.double(arg[3])      # BM rate
+ntips         = as.integer(arg[4])     # number of tips
+ngen          = as.integer(arg[5])     # number of mcmc gen
+sample        = as.integer(arg[6])     # sampling freq
+nGibbs_gen    = as.integer(arg[7])     # number of mcmc gen Gibbs
+Gibbs_sample  = as.integer(arg[8])     # sampling freq Gibbs
+
 #plot_res= F
 #root_calibration =c(0,100)
 
-start_MCMC(w_dir, sim_n, sig2, ntips,ngen,sample)
+start_MCMC(w_dir, sim_n, sig2, ntips,ngen,sample,nGibbs_gen,Gibbs_sample)
 
-#start_MCMC("/Users/daniele/Documents/projects/fossilBM/", 1, 0.2, ntips=10000,ngenerations=50000,sampling_f=10)
+#___	start_MCMC("/Users/daniele/Documents/projects/fossilBM/", 1, 0.2, ntips=100,ngenerations=1000000,sampling_f=2000,nGibbs_gen=250000,Gibbs_sample=500)
+#___	"/Users/daniele/Documents/projects/fossilBM/" 1 0.2 100 1000000 2000 250000 500
+#___	
+#___	
+#___	
+#___	
+#___	w_dir            = "/Users/daniele/Documents/projects/fossilBM/"
+#___	sim_n            = 1
+#___	sig2             = 0.2
+#___	ntips            = 100
+#___	ngen             = 5000
+#___	sample           = 10
+#___	nGibbs_gen       = 5000
+#___	Gibbs_sample     = 10
+#___	root_calibration = c(0,100)
+#___	
+#___	
+#___	
+#___	ngenerations = 50000
+#___	sampling_f = 10
+#___	
+
+
 
 ##
 
