@@ -32,28 +32,7 @@ fN2<-function(xa, xb, vpa, vpb, sigma2_a,sigma2_b, anc) {
 	#return(-(((xa - anc)^2 / vpa) + ((xb - anc)^2 / vpb)) / (2 * sigma2) - log(sqrt(2 * pi * sigma2 * (vpa + vpb))));
 }
 
-newlnLike<-function(tree, vector_tip_root_nodes_values, sigma2,D,S_vec=NULL) {
-	vec_values = vector_tip_root_nodes_values
-	
-	#conditional likelihood vectors
-	#condvec<-rep(0,length(vec_values))
-	#
-	## loop over Johnatan's tbl (REVERSE ORDER)
-	#for (i in dim(D)[1]:1){
-	#	anc_ind <- D[i,1];
-	#	a_ind   <- D[i,2];  # index of descendants
-	#	b_ind   <- D[i,3];  # index of descendants
-	#	vpa     <- D[i,4];  # br length
-	#	vpb     <- D[i,5];  # br length
-	#	anc = vec_values[anc_ind]
-	#	a = vec_values[a_ind]
-	#	b = vec_values[b_ind]
-	#	condvec[anc_ind] = fN2(a,b, vpa+S_vec[a_ind], vpb+S_vec[b_ind], sigma2[a_ind],sigma2[b_ind], anc) # + condvec[a_ind] + condvec[b_ind];
-	#	#print(c(i, anc_ind))
-	#}
-	#lik = condvec #+ fN(anc,anc, S_vec[anc_ind], 0, sigma2) 
-	
-	# lik no loop
+newlnLike<-function(tree, vector_tip_root_nodes_values, sigma2,D) {
 	vec_values = vector_tip_root_nodes_values
         anc_ind_v <- D[,1]
         a_ind_v   <- D[,2]
@@ -100,35 +79,6 @@ build_table <- function (tree,ntips,data){
 	return(table.tree)
 }
 
-
-get_S_vec <- function (D){
-	S =rep(0,(dim(D)[1]+dim(D)[1]+1))
-	
-        for (i in dim(D)[1]:1){
-	      	anc_ind <- D[i,1];
-	      	a_ind   <- D[i,2];  # index of descendants
-	      	b_ind   <- D[i,3];  # index of descendants
-	      	vpa     <- D[i,4];  # br length
-	      	vpb     <- D[i,5];  # br length
-	      	
-		
-		S[anc_ind] = ((vpa + S[a_ind]) * (vpb + S[b_ind])) / ((vpa + S[a_ind]) + (vpb + S[b_ind]))
-		
-	    #  	print(S)
-	}
-	return(S)
-}
-
-
-calc_prior_dist_root_calibration <- function (D,sigma2){
-	trend=0
-	mu_anc = root_calibration[1] + dist_from_root *trend
-	s2_anc = root_calibration[2] + dist_from_root *sigma2
-	prior_tbl = cbind(mu_anc,s2_anc)
-	return(prior_tbl)
-}
-
-
 get_calibration_tbl <- function (D,root_calibration){
 	calibration_tbl =NULL	
 	for (i in 1:dim(D)[1]){
@@ -146,7 +96,7 @@ get_joint_mu_s2 <- function (mu_f,s2_f,mu_g,s2_g){
 	return(c(mu_fg,s2_fg))
 }
 
-runGibbs <- function(sigma2, vector_tip_root_nodes_values,D,S_vec=NULL,prior_tbl,get_expected=0) {
+runGibbs <- function(sigma2, vector_tip_root_nodes_values,D,prior_tbl,get_expected=0) {
 	
 	#prior_tbl = calc_prior_dist_root_calibration(D,sigma2)
 	
@@ -198,29 +148,9 @@ runGibbs <- function(sigma2, vector_tip_root_nodes_values,D,S_vec=NULL,prior_tbl
 			
 			stem_val = vec_values[stem_ind]		
 			stem_lik = c(stem_val, (stem_brl)*sigma2[sig_stem_ind])
-			#stem_lik = get_joint_mu_s2(prior_tbl[i-1,][1],prior_tbl[i-1,][2], stem_lik[1],stem_lik[2] )
-			#get_joint_mu_s2(calibrated_prior_mu,calibrated_prior_s2,stem_val,(stem_brl+S_vec[stem_ind]) *sigma2)
 			
 			lik_val = get_joint_mu_s2(stem_lik[1],stem_lik[2],desc_lik[1],desc_lik[2])
-		}
-		
-		# MH update of root
-		#else { # ROOT
-		#	mu_0= prior_prm[1] #anc 
-		#	s2_0= prior_prm[2]*S_vec[anc_ind]*sigma2
-		#	
-		#	lik_val =  get_joint_mu_s2(mu_0,s2_0,desc_lik[1],desc_lik[2])
-		#}
-		
-		
-		
-		#if (i==1){
-		#	prior_prm = root_calibration
-		#}else{
-		#	prior_prm = c(0,100)
-		#}
-		
-		if (i>1){ 
+
 			post_prm= get_joint_mu_s2(lik_val[1],lik_val[2],prior_prm[1], prior_prm[2])
 			if (get_expected==1){
 				vec_values[anc_ind] = post_prm[1]
@@ -228,23 +158,14 @@ runGibbs <- function(sigma2, vector_tip_root_nodes_values,D,S_vec=NULL,prior_tbl
 				vec_values[anc_ind] = rnorm(1, mean=post_prm[1], sd=sqrt(post_prm[2]))
 			}
 		}
-		
-		
-		# MH update of root
-		#else{
-		# 	vec_values[anc_ind] = rnorm(1, mean=prior_prm[1], sd=sqrt(prior_prm[2]))
-		#}
-         }
-         #print(condvec)
-         return(vec_values[D[,1]] )
+	}
+	return(vec_values[D[,1]] )
 }
 
 
 ################ DPP GIBBS SAMPLER
 G0 <- function (){
 	return(abs(rcauchy(1,0,1)))
-	#return (runif(1,0.01,3))
-	#return (rgamma(1,1,1/3))
 }
 
 calc_rel_prob <- function(log_lik){
@@ -275,344 +196,9 @@ cond_alpha_proposal <- function(current_alpha,k,n,hp_gamma_shape=1,hp_gamma_rate
 	return (new_alpha)	
 }
 
-DDP_gibbs_sampler <- function(tree,sigma2,ind,vec_values,D,prior_tbl,alpha_par_Dir){
-	# sig2: sig2ameters for each category
-	n_data=length(ind)
-	# GIBBS SAMPLER for NUMBER OF CATEGORIES - Algorithm 4. (Neal 2000)
-	sig2=sigma2 # sig2   parameters for each category
-
-	eta=rep(0,length(sig2)) # number of elements in each category
-	for (j in 1:length(sig2)){
-		eta[j] = length(ind[ind==j])
-	}
-	#__ cat("\nstart ind",ind)
-	#__ cat("\nstart eta",eta)
-	
-	u1 = runif(n_data,0,1) # init random numbers
-	new_lik_vec=rep(0,n_data) # store new sampled likelihoods
-	
-	new_alpha_par_Dir = cond_alpha_proposal(alpha_par_Dir,length(sig2),n_data,hp_gamma_shape=2,hp_gamma_rate=2)
-	
-	TE=as.matrix(tree$edge)
-	
-	sample_branch = 1:dim(TE)[1] # sample.int(dim(TE)[1],size=dim(TE)[1])
-	for (i in sample_branch){
-		#__ cat("\nETA",eta)
-		anc_ind <- TE[i,1];
-		des_ind <- TE[i,2];  # index of descendant
-		anc = vec_values[anc_ind]
-		des = vec_values[des_ind]
-		
-		k1 = length(sig2)
-
-		if (length(ind[ind==ind[des_ind]])==1){ # is singleton
-			k1 = k1 - 1
-			sig2_k1 = sig2			
-			if (u1[i]<= k1/(k1+1)){
-				0 #NULL
-			}else{
-				ind[des_ind] = k1 + 1
-			} # this way n_ic for singleton is not 0
-		} else{ # is not singleton
-			sig2_k1 = append(sig2,G0())
-		}
-		
-		# construct prob vector
-	        lik_vec = dnorm(des, mean=anc, sd= sqrt(tree$edge.length[des_ind]*sig2_k1),log=T) # lik of branch i under different sig2
-		rel_lik = calc_rel_prob(lik_vec)
-
-		if (length(sig2_k1)>length(eta)){ # sig2_k1 add one element only when i is not singleton
-			eta[ind[des_ind]] = eta[ind[des_ind]]-1
-			eta_temp= append(eta,new_alpha_par_Dir/(k1+1))
-		}
-		else{
-			eta_temp = eta
-		}
-		#__ cat("\nind",ind)		
-		#__ cat( c("\n\neta:",eta_temp, "\nsig:",sig2_k1,  "\nlik:",rel_lik, lik_vec))
-		
-		P=eta_temp*rel_lik
-		# randomly sample a new value for indicator ind[i]
-		IND = random_choice_P(P)[2] 
-		ind[des_ind] = IND # update ind vector
-		if (IND==(length(sig2_k1))){
-			sig2 = sig2_k1 # add category
-		}
-		#__ cat("\nnew ind",ind)		
-
-
-		# Change the state to contain only those sig2 are now associated with an observation
-		# create vector of number of elements per category
-		eta=rep(0,length(sig2))
-		for (j in 1:length(sig2)){
-			eta[j] = length(ind[ind==j])
-		}
-		#__ cat( c("\n\nnew eta:",eta, "\nsig:",sig2_k1))
-		# remove parameters for which there are no elements
-		sig2 = sig2[eta>0]
-		# rescale indexes
-		ind_rm = which(eta==0) # which category has no elements
-		if (length(ind_rm)>0){
-			ind[ind>=ind_rm] = ind[ind>=ind_rm]-1
-			# update eta
-			eta = eta[-ind_rm]
-		}
-
-		# Update lik vec
-		new_lik_vec[i]=lik_vec[IND]
-	}	
-	#print (c("DPP lik", sum(new_lik_vec)))
-	likA = sum(new_lik_vec) # newlnLike(tree, vector_tip_root_nodes_values, sig2[ind],D)
-	sig2A = sig2
-	return (list(sig2A, ind,new_alpha_par_Dir))
-	
-}
-
-
-DDP_gibbs_sampler2 <- function(tree,sigma2,ind,x,a,y,D,prior_tbl,alpha_par_Dir){
-	vec_values=c(x,a,y)
-	ay_temp = c(a,y) #runGibbs(sigma2[ind], c(x,a,y),D,S_vec=NULL,prior_tbl,get_expected=1)
-	# sig2: sig2ameters for each category
-	n_data=length(ind)
-	# GIBBS SAMPLER for NUMBER OF CATEGORIES - Algorithm 4. (Neal 2000)
-	sig2=sigma2 # sig2   parameters for each category
-
-	eta=rep(0,length(sig2)) # number of elements in each category
-	for (j in 1:length(sig2)){
-		eta[j] = length(ind[ind==j])
-	}
-	#__ cat("\nstart ind",ind)
-	#__ cat("\nstart eta",eta)
-	
-	u1 = runif(n_data,0,1) # init random numbers
-	new_lik_vec=rep(0,n_data) # store new sampled likelihoods
-	
-	new_alpha_par_Dir = cond_alpha_proposal(alpha_par_Dir,length(sig2),n_data,hp_gamma_shape=1,hp_gamma_rate=0.2)
-	#__ cat("\n\nLIK1:", sum(newlnLike(tree, vec_values, sig2[ind],D)))
-	
-	i = sample(dim(D)[1]:1,1)
-	
-	#for (i in dim(D)[1]:1){
-		anc_ind <- D[i,1];
-		a_ind   <- D[i,2];  # index of descendants
-		b_ind   <- D[i,3];  # index of descendants
-		vpa     <- D[i,4];  # br length
-		vpb     <- D[i,5];  # br length
-		anc = vec_values[anc_ind]
-		a = vec_values[a_ind]
-		b = vec_values[b_ind]
-		
-		
-		if (a_ind>ntips){
-			des_a_ind=a_ind-1 # because no sig2 value for root
-		}else{des_a_ind=a_ind}
-
-		if (b_ind>ntips){
-			des_b_ind=b_ind-1
-		}else{des_b_ind=b_ind}
-		
-
-		#__ cat("\nETA",eta)
-		#anc_ind <- TE[i,1];
-		#des_ind <- TE[i,2];  # index of descendant
-		#anc = vec_values[anc_ind]
-		#des = vec_values[des_ind]
-		
-		
-		rr= runif(1)
-		if (rr>0.5){
-			des_ind= des_a_ind
-		}else{des_ind=  des_b_ind}
-		
-		
-		k1 = length(sig2)
-
-		if (length(ind[ind==ind[des_ind]])==1){ # is singleton
-			k1 = k1 - 1
-			sig2_k1 = sig2			
-			if (u1[i]<= k1/(k1+1)){
-				0 #NULL
-			}else{
-				ind[des_ind] = k1 + 1
-			} # this way n_ic for singleton is not 0
-		} else{ # is not singleton
-			sig2_k1 = append(sig2,G0())
-		}
-		
-		# construct prob vector
-		lik_vec=c()
-		ay=list()
-		for (R in sig2_k1){
-			sigma2_vec=sig2[ind]
-			sigma2_vec[des_ind]=R
-			#__ cat("\n\nbefore:",ay_temp)
-			#ay_temp = runGibbs(sigma2_vec, c(x,ay_temp),D,S_vec=NULL,prior_tbl,get_expected=1)
-			#__ cat("\nafter :",ay_temp)
-			#a.prime= ay_temp[1]
-			#y.prime= ay_temp[-1]
-			# l_temp = sum(newlnLike(tree, c(x,a.prime,y.prime), sigma2_vec,D))
-			l_temp = sum(newlnLike(tree, vec_values, sigma2_vec,D))
-			lik_vec = append(lik_vec, l_temp)
-			#ay=append(ay,ay_temp)
-		}
-
-		rel_lik = calc_rel_prob(lik_vec)
-
-		if (length(sig2_k1)>length(eta)){ # sig2_k1 add one element only when i is not singleton
-			eta[ind[des_ind]] = eta[ind[des_ind]]-1
-			eta_temp= append(eta,new_alpha_par_Dir/(k1+1))
-		}
-		else{
-			eta_temp = eta
-		}
-		#__ cat("\nind",ind)		
-		#__ cat( c("\n\neta:",eta_temp, "\nsig:",sig2_k1,  "\nlik:",rel_lik, lik_vec))
-		
-		P=eta_temp*rel_lik
-		# randomly sample a new value for indicator ind[i]
-		IND = random_choice_P(P)[2] 
-		ind[des_ind] = IND # update ind vector
-		if (IND==(length(sig2_k1))){
-			sig2 = sig2_k1 # add category
-		}
-		#__ cat("\nnew ind",ind)		
-
-
-		# Change the state to contain only those sig2 are now associated with an observation
-		# create vector of number of elements per category
-		eta=rep(0,length(sig2))
-		for (j in 1:length(sig2)){
-			eta[j] = length(ind[ind==j])
-		}
-		#__ cat( c("\n\nnew eta:",eta, "\nsig:",sig2_k1))
-		# remove parameters for which there are no elements
-		sig2 = sig2[eta>0]
-		# rescale indexes
-		ind_rm = which(eta==0) # which category has no elements
-		if (length(ind_rm)>0){
-			ind[ind>=ind_rm] = ind[ind>=ind_rm]-1
-			# update eta
-			eta = eta[-ind_rm]
-		}
-		new_lik_vec[des_ind]=lik_vec[IND]
-		#ay_temp = runGibbs(sigma2_vec, c(x,ay_temp),D,S_vec=NULL,prior_tbl,get_expected=1)
-
-		#}
-	#print (ay_temp)	
-	#__ cat("\nDPP lik", lik_vec[IND],sum(newlnLike(tree, vec_values, sig2[ind],D)))
-	likA = sum(new_lik_vec) # newlnLike(tree, vector_tip_root_nodes_values, sig2[ind],D)
-	sig2A = sig2
-	return (list(sig2A, ind,new_alpha_par_Dir))
-	
-}
-
-DDP_gibbs_sampler3 <- function(tree,sigma2,ind,vec_values,D,prior_tbl,alpha_par_Dir){
-	# sig2: sig2ameters for each category
-	n_data=length(ind)
-	# GIBBS SAMPLER for NUMBER OF CATEGORIES - Algorithm 4. (Neal 2000)
-	sig2=sigma2 # sig2   parameters for each category
-
-	eta=rep(0,length(sig2)) # number of elements in each category
-	for (j in 1:length(sig2)){
-		eta[j] = length(ind[ind==j])
-	}
-	#__ cat("\nstart ind",ind)
-	#__ cat("\nstart eta",eta)
-	
-	u1 = runif(n_data,0,1) # init random numbers
-	new_lik_vec=rep(0,n_data) # store new sampled likelihoods
-	
-	new_alpha_par_Dir = cond_alpha_proposal(alpha_par_Dir,length(sig2),n_data,hp_gamma_shape=2,hp_gamma_rate=2)
-	
-	TE=as.matrix(tree$edge[order(tree$edge[,2]),])
-	TEL = tree$edge.length[order(tree$edge[,2])]
-	
-	#__ cat("\n\nLIK1:", sum(newlnLike(tree, vec_values, sig2[ind],D)))
-	
-	sample_branch = 1:(dim(TE)[1]) # sample.int(dim(TE)[1],size=dim(TE)[1])
-	for (i in sample_branch){
-	#i =sample(sample_branch,1)
-		#__ cat("\nETA",eta)
-		anc_ind <- TE[i,1];
-		des_ind <- TE[i,2];  # index of descendant
-		anc = vec_values[anc_ind]
-		des = vec_values[des_ind]
-		#cat("\nINDex: ",anc_ind,des_ind,i)
-		
-		k1 = length(sig2)
-
-		if (length(ind[ind==ind[des_ind]])==1){ # is singleton
-			k1 = k1 - 1
-			sig2_k1 = sig2			
-			if (u1[i]<= k1/(k1+1)){
-				0 #NULL
-			}else{
-				ind[des_ind] = k1 + 1
-			} # this way n_ic for singleton is not 0
-		} else{ # is not singleton
-			sig2_k1 = append(sig2,G0())
-		}
-		
-		# construct prob vector
-		if (des_ind>ntips){
-			des_ind_l=des_ind-1
-		}else{des_ind_l=des_ind}
-	        lik_vec = dnorm(des, mean=anc, sd= sqrt(TEL[i]*sig2_k1),log=T) # lik of branch i under different sig2
-		rel_lik = calc_rel_prob(lik_vec)
-
-		if (length(sig2_k1)>length(eta)){ # sig2_k1 add one element only when i is not singleton
-			eta[ind[des_ind]] = eta[ind[des_ind]]-1
-			eta_temp= append(eta,new_alpha_par_Dir/(k1+1))
-		}
-		else{
-			eta_temp = eta
-		}
-		#__ cat("\nold ind",ind)		
-		#__ cat( c("\n\ndes", des, des_ind, "eta:",eta_temp, "\nsig:",sig2_k1,  "\nlik:",rel_lik, lik_vec))
-		
-		P=eta_temp*rel_lik
-		# randomly sample a new value for indicator ind[i]
-		IND = random_choice_P(P)[2] 
-		ind[des_ind] = IND # update ind vector
-		if (IND==(length(sig2_k1))){
-			sig2 = sig2_k1 # add category
-		}
-		#__ cat("\nP:",P,IND)		
-		#__ cat("\nnew ind",ind)		
-
-
-		# Change the state to contain only those sig2 are now associated with an observation
-		# create vector of number of elements per category
-		eta=rep(0,length(sig2))
-		for (j in 1:length(sig2)){
-			eta[j] = length(ind[ind==j])
-		}
-		#__ cat( c("\n\nnew eta:",eta, "\nsig:",sig2_k1))
-		# remove parameters for which there are no elements
-		sig2 = sig2[eta>0]
-		# rescale indexes
-		ind_rm = which(eta==0) # which category has no elements
-		if (length(ind_rm)>0){
-			ind[ind>=ind_rm] = ind[ind>=ind_rm]-1
-			# update eta
-			eta = eta[-ind_rm]
-		}
-
-		# Update lik vec
-		new_lik_vec[des_ind]=lik_vec[IND]
-	}	
-	#print (c("DPP lik", sum(new_lik_vec)))
-	likA = sum(new_lik_vec) # newlnLike(tree, vector_tip_root_nodes_values, sig2[ind],D)
-	sig2A = sig2
-	#__ cat("\nLIK2:", sum(newlnLike(tree, vec_values, sig2[ind],D)), sum(new_lik_vec))
-	#__ cat("\nend ind",ind)
-	return (list(sig2A, ind,new_alpha_par_Dir))
-	
-}
-
 DDP_gibbs_sampler4 <- function(tree,sigma2,ind,x,a,y,D,prior_tbl,alpha_par_Dir,ind_anc,des_col){
 	vec_values=c(x,a,y)
-	ay_temp = c(a,y) #runGibbs(sigma2[ind], c(x,a,y),D,S_vec=NULL,prior_tbl,get_expected=1)
+	ay_temp = c(a,y)
 	# sig2: sig2ameters for each category
 	n_data=length(ind)
 	# GIBBS SAMPLER for NUMBER OF CATEGORIES - Algorithm 4. (Neal 2000)
@@ -633,109 +219,103 @@ DDP_gibbs_sampler4 <- function(tree,sigma2,ind,x,a,y,D,prior_tbl,alpha_par_Dir,i
 	
 	i = ind_anc
 	
-	#for (i in dim(D)[1]:1){
-		anc_ind <- D[i,1];
-		a_ind   <- D[i,2];  # index of descendants
-		b_ind   <- D[i,3];  # index of descendants
-		vpa     <- D[i,4];  # br length
-		vpb     <- D[i,5];  # br length
-		anc = vec_values[anc_ind]
-		a = vec_values[a_ind]
-		b = vec_values[b_ind]
-		
-		
-		if (a_ind>ntips){
-			des_a_ind=a_ind-1 # because no sig2 value for root
-		}else{des_a_ind=a_ind}
+	anc_ind <- D[i,1];
+	a_ind   <- D[i,2];  # index of descendants
+	b_ind   <- D[i,3];  # index of descendants
+	vpa     <- D[i,4];  # br length
+	vpb     <- D[i,5];  # br length
+	anc = vec_values[anc_ind]
+	a = vec_values[a_ind]
+	b = vec_values[b_ind]
+	
+	
+	if (a_ind>ntips){
+		des_a_ind=a_ind-1 # because no sig2 value for root
+	}else{des_a_ind=a_ind}
 
-		if (b_ind>ntips){
-			des_b_ind=b_ind-1
-		}else{des_b_ind=b_ind}
-		
+	if (b_ind>ntips){
+		des_b_ind=b_ind-1
+	}else{des_b_ind=b_ind}
+	
 
-		#__ cat("\nETA",eta)
-		#anc_ind <- TE[i,1];
-		#des_ind <- TE[i,2];  # index of descendant
-		#anc = vec_values[anc_ind]
-		#des = vec_values[des_ind]
-		
-		
-		if (des_col==1){
-			des_ind= des_a_ind
-		}else{des_ind=  des_b_ind}
-		
-		
-		k1 = length(sig2)
+	#__ cat("\nETA",eta)
+	#anc_ind <- TE[i,1];
+	#des_ind <- TE[i,2];  # index of descendant
+	#anc = vec_values[anc_ind]
+	#des = vec_values[des_ind]
+	
+	
+	if (des_col==1){
+		des_ind= des_a_ind
+	}else{des_ind=  des_b_ind}
+	
+	
+	k1 = length(sig2)
 
-		if (length(ind[ind==ind[des_ind]])==1){ # is singleton
-			k1 = k1 - 1
-			sig2_k1 = sig2			
-			if (u1[i]<= k1/(k1+1)){
-				0 #NULL
-			}else{
-				ind[des_ind] = k1 + 1
-			} # this way n_ic for singleton is not 0
-		} else{ # is not singleton
-			sig2_k1 = append(sig2,G0())
-		}
-		
-		# construct prob vector
-		lik_vec=c()
-		ay=list()
-		for (R in sig2_k1){
-			sigma2_vec=sig2[ind]
-			sigma2_vec[des_ind]=R
-			l_temp = sum(newlnLike(tree, vec_values, sigma2_vec,D))
-			lik_vec = append(lik_vec, l_temp)
-		}
+	if (length(ind[ind==ind[des_ind]])==1){ # is singleton
+		k1 = k1 - 1
+		sig2_k1 = sig2			
+		if (u1[i]<= k1/(k1+1)){
+			0 #NULL
+		}else{
+			ind[des_ind] = k1 + 1
+		} # this way n_ic for singleton is not 0
+	} else{ # is not singleton
+		sig2_k1 = append(sig2,G0())
+	}
+	
+	# construct prob vector
+	lik_vec=c()
+	ay=list()
+	for (R in sig2_k1){
+		sigma2_vec=sig2[ind]
+		sigma2_vec[des_ind]=R
+		l_temp = sum(newlnLike(tree, vec_values, sigma2_vec,D))
+		lik_vec = append(lik_vec, l_temp)
+	}
 
-		rel_lik = calc_rel_prob(lik_vec)
+	rel_lik = calc_rel_prob(lik_vec)
 
-		if (length(sig2_k1)>length(eta)){ # sig2_k1 add one element only when i is not singleton
-			eta[ind[des_ind]] = eta[ind[des_ind]]-1
-			eta_temp= append(eta,new_alpha_par_Dir/(k1+1))
-		}
-		else{
-			eta_temp = eta
-		}
-		
-		P=eta_temp*rel_lik
-		IND = random_choice_P(P)[2] 
-		ind[des_ind] = IND # update ind vector
-		if (IND==(length(sig2_k1))){
-			sig2 = sig2_k1 # add category
-		}
-		# Change the state to contain only those sig2 are now associated with an observation
-		# create vector of number of elements per category
-		eta=rep(0,length(sig2))
-		for (j in 1:length(sig2)){
-			eta[j] = length(ind[ind==j])
-		}
-		#__ cat( c("\n\nnew eta:",eta, "\nsig:",sig2_k1))
-		# remove parameters for which there are no elements
-		sig2 = sig2[eta>0]
-		# rescale indexes
-		ind_rm = which(eta==0) # which category has no elements
-		if (length(ind_rm)>0){
-			ind[ind>=ind_rm] = ind[ind>=ind_rm]-1
-			# update eta
-			eta = eta[-ind_rm]
-		}
-		new_lik_vec[des_ind]=lik_vec[IND]
-		#ay_temp = runGibbs(sigma2_vec, c(x,ay_temp),D,S_vec=NULL,prior_tbl,get_expected=1)
+	if (length(sig2_k1)>length(eta)){ # sig2_k1 add one element only when i is not singleton
+		eta[ind[des_ind]] = eta[ind[des_ind]]-1
+		eta_temp= append(eta,new_alpha_par_Dir/(k1+1))
+	}
+	else{
+		eta_temp = eta
+	}
+	
+	P=eta_temp*rel_lik
+	IND = random_choice_P(P)[2] 
+	ind[des_ind] = IND # update ind vector
+	if (IND==(length(sig2_k1))){
+		sig2 = sig2_k1 # add category
+	}
+	# Change the state to contain only those sig2 are now associated with an observation
+	# create vector of number of elements per category
+	eta=rep(0,length(sig2))
+	for (j in 1:length(sig2)){
+		eta[j] = length(ind[ind==j])
+	}
+	#__ cat( c("\n\nnew eta:",eta, "\nsig:",sig2_k1))
+	# remove parameters for which there are no elements
+	sig2 = sig2[eta>0]
+	# rescale indexes
+	ind_rm = which(eta==0) # which category has no elements
+	if (length(ind_rm)>0){
+		ind[ind>=ind_rm] = ind[ind>=ind_rm]-1
+		# update eta
+		eta = eta[-ind_rm]
+	}
+	new_lik_vec[des_ind]=lik_vec[IND]
 
-		#}
-	#print (ay_temp)	
-	#__ cat("\nDPP lik", lik_vec[IND],sum(newlnLike(tree, vec_values, sig2[ind],D)))
 	likA = sum(new_lik_vec) # newlnLike(tree, vector_tip_root_nodes_values, sig2[ind],D)
 	sig2A = sig2
 	return (list(sig2A, ind,new_alpha_par_Dir))
 	
 }
 
-
 ################################## START MCMC ###################################
-mcmc.gibbs4 <- function (tree, x,alter_ind, D, prior_tbl,true_anc,S_vec, ngen = 100000, control = list(), gibbs_sampler=T,useVCV=F, sample=100,logfile="log",update_sig_freq=0.5) 
+mcmc.gibbs4 <- function (tree, x,alter_ind, D, prior_tbl,true_anc,ngen = 100000, control = list(), gibbs_sampler=T,useVCV=F, sample=100,logfile="log",update_sig_freq=0.5,useDPP=T) 
 {
 	TE=as.matrix(tree$edge)
 	cat(c("it", "posterior","likelihood","prior", "sig2","K", "root","alpha", paste("sig2", TE[,1],TE[,2],sep="_"), D[-1,1],"\n"),sep="\t", file=logfile, append=F)
@@ -763,7 +343,7 @@ mcmc.gibbs4 <- function (tree, x,alter_ind, D, prior_tbl,true_anc,S_vec, ngen = 
 	else{
 	    likelihood <- function(C, invC, detC, x, sig2, a, y) {
 		vector_tip_root_nodes_values = c(x, a, y)
-		return(sum(newlnLike(tree, vector_tip_root_nodes_values, sig2,D,S_vec)))
+		return(sum(newlnLike(tree, vector_tip_root_nodes_values, sig2,D)))
 		}    	
 	}
 
@@ -787,7 +367,7 @@ mcmc.gibbs4 <- function (tree, x,alter_ind, D, prior_tbl,true_anc,S_vec, ngen = 
 	names(y) <- length(tree$tip) + 2:tree$Nnode
 	else y[as.character(length(tree$tip) + 2:tree$Nnode)]
 	# L <- likelihood(C, invC, detC, x, sig2[1], a, y)
-	L  <- newlnLike(tree, c(x, a, y), sig2[ind_sig2],D,S_vec)
+	L  <- newlnLike(tree, c(x, a, y), sig2[ind_sig2],D)
 	# print (c(L,sum(L1)))
 	Pr <- log.prior(sig2, a, y)
 
@@ -802,11 +382,13 @@ mcmc.gibbs4 <- function (tree, x,alter_ind, D, prior_tbl,true_anc,S_vec, ngen = 
 		gibbs=0
 		hastings=0
     	    	
-		mean_sig = mean_sig+sig2[ind_sig2]
+		mean_sig = rbind(mean_sig,sig2[ind_sig2])
 		
 		if (i%%print_f == 0 || i==1) {
 			cat(c("\n",i,round(c(sum(L),sig2),2),"\n",ind_sig2))
-    		        rates_temp = mean_sig/i #
+			start = round(dim(mean_sig)[1]*0.1)
+			end = dim(mean_sig)[1]
+    		        rates_temp = apply(mean_sig[start:end,], 2, FUN=mean)
 			#rates_temp = sig2[ind_sig2]
     		        rates = c()
 		        
@@ -838,18 +420,6 @@ mcmc.gibbs4 <- function (tree, x,alter_ind, D, prior_tbl,true_anc,S_vec, ngen = 
 				a.prime <- a + rnorm(n = 1, sd = 0.5) #sqrt(con$prop[j + 1]))
 			}
 		}
-		#else if (rr<0.9 & i>2000){ # RUN DPP
-		#	dpp_list = DDP_gibbs_sampler2(tree,sig2,ind_sig2,x, a, y,D,prior_tbl,alpha_par_Dir)
-		#	#dpp_list = DDP_gibbs_sampler3(tree,sig2,ind_sig2,c(x, a, y),D,prior_tbl,alpha_par_Dir)
-		#	sig2.prime    = dpp_list[[1]]
-		#	ind_sig2      = dpp_list[[2]]
-		#	alpha_par_Dir = dpp_list[[3]]
-		#	#vector_tip_root_nodes_values = c(x, a, y)
-		#	#y_temp = runGibbs(sig2.prime[ind_sig2], vector_tip_root_nodes_values,D,S_vec,prior_tbl,get_expected=1)
-		#	#a.prime= y_temp[1]
-		#	#y.prime= y_temp[-1]
-		#	gibbs=0
-		#}
 		 else{
 			  # ANC STATES
 			if (gibbs_sampler==F){
@@ -858,45 +428,35 @@ mcmc.gibbs4 <- function (tree, x,alter_ind, D, prior_tbl,true_anc,S_vec, ngen = 
 				y.prime[k] <- y[k] + rnorm(n = 1, sd = 0.5) #sqrt(con$prop[j + 1]))	
 			} 
 			else {
-				#cat("\npre_L:",sum(newlnLike(tree, c(x, a.prime, y.prime), sig2.prime[ind_sig2],D,S_vec)))			
-				for (i_temp in dim(D)[1]:1){
-					dpp_list = DDP_gibbs_sampler4(tree,sig2.prime,ind_sig2,x, a.prime, y.prime,D,prior_tbl,alpha_par_Dir,i_temp,1)
-					#dpp_list = DDP_gibbs_sampler3(tree,sig2,ind_sig2,c(x, a, y),D,prior_tbl,alpha_par_Dir)
-					sig2.prime    = dpp_list[[1]]
-					ind_sig2      = dpp_list[[2]]
-					alpha_par_Dir = dpp_list[[3]]
-					#vector_tip_root_nodes_values = c(x, a.prime, y.prime)
-					#y_temp = runGibbs(sig2.prime[ind_sig2], vector_tip_root_nodes_values,D,S_vec,prior_tbl,get_expected=0)
-					#a.prime= y_temp[1]
-					#y.prime= y_temp[-1]
+				if (i>100 && useDPP==T){
+					for (i_temp in dim(D)[1]:1){
+						dpp_list = DDP_gibbs_sampler4(tree,sig2.prime,ind_sig2,x, a.prime, y.prime,D,prior_tbl,alpha_par_Dir,i_temp,1)
+						sig2.prime    = dpp_list[[1]]
+						ind_sig2      = dpp_list[[2]]
+						alpha_par_Dir = dpp_list[[3]]
 
-					dpp_list = DDP_gibbs_sampler4(tree,sig2.prime,ind_sig2,x, a.prime, y.prime,D,prior_tbl,alpha_par_Dir,i_temp,2)
-					#dpp_list = DDP_gibbs_sampler3(tree,sig2,ind_sig2,c(x, a, y),D,prior_tbl,alpha_par_Dir)
-					sig2.prime    = dpp_list[[1]]
-					ind_sig2      = dpp_list[[2]]
-					alpha_par_Dir = dpp_list[[3]]
+						dpp_list = DDP_gibbs_sampler4(tree,sig2.prime,ind_sig2,x, a.prime, y.prime,D,prior_tbl,alpha_par_Dir,i_temp,2)
+						sig2.prime    = dpp_list[[1]]
+						ind_sig2      = dpp_list[[2]]
+						alpha_par_Dir = dpp_list[[3]]
+					}
+					
 				}
 				vector_tip_root_nodes_values = c(x, a.prime, y.prime)
-				y_temp = runGibbs(sig2.prime[ind_sig2], vector_tip_root_nodes_values,D,S_vec,prior_tbl,get_expected=0)
+				y_temp = runGibbs(sig2.prime[ind_sig2], vector_tip_root_nodes_values,D,prior_tbl,get_expected=0)
 				a.prime= y_temp[1]
 				y.prime= y_temp[-1]
 				gibbs=1
-				#cat("\npostL:",sum(newlnLike(tree, c(x, a.prime, y.prime), sig2.prime[ind_sig2],D,S_vec)))			
 			}
 
 		}
 
 	       # calc post
-		#L.prime <- likelihood(C, invC, detC, x, sig2.prime[1], a.prime,  y.prime)
-		L.prime <- newlnLike(tree, c(x, a.prime, y.prime), sig2.prime[ind_sig2],D,S_vec)
-	
-		#print(c(L.prime,sum(L1.prime)))
+		L.prime <- newlnLike(tree, c(x, a.prime, y.prime), sig2.prime[ind_sig2],D)
 	
 		Pr.prime <- log.prior(sig2.prime[ind_sig2], a.prime, y.prime)
 	
-		#print (c(sum(Pr.prime) , sum(L.prime) , sum(Pr) , sum(L) , hastings))
 		if ( (sum(Pr.prime) + sum(L.prime) - sum(Pr) - sum(L) + hastings) >= log(runif(1,0,1)) || gibbs==1){    
-		#if (2>1){
 			y =    y.prime
 			L =    L.prime
 			Pr =   Pr.prime
@@ -913,15 +473,11 @@ mcmc.gibbs4 <- function (tree, x,alter_ind, D, prior_tbl,true_anc,S_vec, ngen = 
 }
 }
 
-
-
-
-
 ################################## END   MCMC ###################################
 
 
 ############################### SIMULATE DATA #######################################
-sim_data <- function(ntips=20,s2=0.1){
+sim_data <- function(ntips=20,s2=0.1,variable_rate=0){
 	print("Simulating trees")
 	tree<-ladderize(pbtree(n=ntips, scale=1))
 	print("Simulating data")
@@ -955,7 +511,12 @@ sim_data <- function(ntips=20,s2=0.1){
 	#alter = 1:10
 	#sigmas2[alter] = sigmas2[alter]*5
 	alter = sample(1:198,80) #5:80 # 
-	sigmas2[alter] = sigmas2[alter]*15
+	if (variable_rate==1){
+		sigmas2[alter] = sigmas2[alter]*15		
+	}else if (variable_rate==2){
+		alter = 5:80
+		sigmas2[alter] = sigmas2[alter]*15		
+	}
 	#alter = sample(100:length(phy$edge.length),20) # 12:50
 	#sigmas2[alter] = sigmas2[alter]/15
 	# end Martha\s code
@@ -993,13 +554,12 @@ get_time <- function(){
 
 start_MCMC <- function(w_dir,sim_n,sig2,ntips,ngenerations,sampling_f,nGibbs_gen,Gibbs_sample,root_calibration = c(0,100), plot_res = F){
 	setwd(w_dir)
-	S = sim_data(ntips=ntips,s2=sig2)
+	S = sim_data(ntips=ntips,s2=sig2,variable_rate=var_rate)
 	tree= S[[1]]
 	full_data= S[[2]]
 	data <- S[[2]][names(S[[2]]) %in% tree$tip.label]
 	true_anc = S[[2]][names(S[[2]]) %in% tree$edge]
 	D <- build_table(tree, ntips,data)
-	S_vec <- get_S_vec(D)*0 # vector with extra-variances
 	BR= branching.times(tree) # sorted from root to most recent
 	dist_from_root = max(BR)-BR
 	#phenogram(tree, full_data,add=F, col=rep("black",length(full_data)))
@@ -1009,24 +569,10 @@ start_MCMC <- function(w_dir,sim_n,sig2,ntips,ngenerations,sampling_f,nGibbs_gen
 	prior_tbl = get_calibration_tbl(D,root_calibration)
 	
 	print("Starting MCMC...")
-	time_file = sprintf("sim_%s_s2_%s_n_%s_time.txt", sim_n, sig2, ntips)
 
-	# run VCV likelihood
-	#_ t1 = get_time()
-	#_ logfile1 = sprintf("sim_%s_s2_%s_n_%s_VCV.log", sim_n, sig2, ntips)
-	#_ mcmc.gibbs4(tree, data, D, prior_tbl, true_anc,S_vec, ngen=ngenerations,gibbs_sampler=F,useVCV=T,logfile=logfile1,update_sig_freq=0.15,sample=sampling_f)        
-	#_ cat("Time VCV:", get_time() - t1, sep="\t", file = time_file)
-	#_ 
-	#_ # run MH likelihood
-	#_ t1 = get_time()
-	#_ logfile2 = sprintf("sim_%s_s2_%s_n_%s_MH.log", sim_n, sig2, ntips)
-	#_ mcmc.gibbs4(tree, data, D, prior_tbl, true_anc,S_vec, ngen=ngenerations,gibbs_sampler=F,useVCV=F,logfile=logfile2,update_sig_freq=0.15,sample=sampling_f)
-	#_ cat("\nTime MH:", get_time() - t1, sep="\t", file = time_file,append=T)
-        
-	# run Gibbs likelihood
 	t1 = get_time()
-	logfile3 = sprintf("sim_%s_s2_%s_n_%s_Gibbs3C.log", sim_n, sig2, ntips)
-	mcmc.gibbs4(tree, data,alter_ind, D, prior_tbl, true_anc,S_vec, ngen= nGibbs_gen,gibbs_sampler=T,useVCV=F,logfile=logfile3,update_sig_freq=0.5,sample=Gibbs_sample)
+	logfile3 = sprintf("sim_%s_s2_%s_n_%s.log", sim_n, sig2, ntips)
+	mcmc.gibbs4(tree, data,alter_ind, D, prior_tbl, true_anc, ngen= nGibbs_gen,gibbs_sampler=T,useVCV=F,logfile=logfile3,update_sig_freq=0.5,sample=Gibbs_sample,useDPP=T)
 	cat("\nTime Gibbs:", get_time() - t1, sep="\t", file = time_file,append=T)
 
 	if (plot_res==T){
@@ -1051,7 +597,6 @@ start_MCMC <- function(w_dir,sim_n,sig2,ntips,ngenerations,sampling_f,nGibbs_gen
 
 
 
-print_f=100
 
 
 ## GLOBAL
@@ -1084,6 +629,10 @@ sample           = 10
 nGibbs_gen       = 250000
 Gibbs_sample     = 100
 root_calibration = c(0,100)
+var_rate         = 2
+print_f          = 100
+useDPP           = T
+
 #___	
 #___	
 #___	
