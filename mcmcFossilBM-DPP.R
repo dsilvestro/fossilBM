@@ -315,16 +315,16 @@ DDP_gibbs_sampler4 <- function(tree,sigma2,ind,x,a,y,D,prior_tbl,alpha_par_Dir,i
 }
 
 ################################## START MCMC ###################################
-mcmc.gibbs4 <- function (tree, x,alter_ind, D, prior_tbl,true_anc,ngen = 100000, control = list(), gibbs_sampler=T,useVCV=F, sample=100,logfile="log",update_sig_freq=0.5,useDPP=T) 
+mcmc.gibbs4 <- function (tree, x,alter_ind, D, prior_tbl,true_anc= NA,ngen = 100000, control = list(), gibbs_sampler=T,useVCV=F, sample=100,logfile="log",update_sig_freq=0.5,useDPP=T,dynamicPlot = F) 
 {
 	TE=as.matrix(tree$edge)
-	cat(c("it", "posterior","likelihood","prior", "sig2","K", "root","alpha", paste("sig2", TE[,1],TE[,2],sep="_"), D[-1,1],"\n"),sep="\t", file=logfile, append=F)
+	cat(c("it", "posterior","likelihood","prior", "sig2","K", "root","alpha", paste("sig2", 1:length(TE[,1]),sep="_"), D[-1,1],"\n"),sep="\t", file=logfile, append=F)
 	a <- 0
 	y <- rep(0, tree$Nnode - 1)
 	sig2 <- c(0.2) # rep(0.2, length(c(x,  y))) # 
 	ind_sig2 <- rep(1, length(c(x, y))) #1:length(c(x, y)) #
 	mean_sig <- rep(0, length(c(x, y)))
-	dev.new()
+	if (dynamicPlot == T){dev.new()}
 	#new_alter_ind = tree$edge[alter_ind,2]
 	#new_alter_ind[new_alter_ind>ntips] = new_alter_ind[new_alter_ind>ntips]-1
 	#ind_sig2[new_alter_ind] = 2
@@ -338,7 +338,12 @@ mcmc.gibbs4 <- function (tree, x,alter_ind, D, prior_tbl,true_anc,ngen = 100000,
 			z <- c(x, y) - a
 			logLik <- -z %*% invC %*% z/(2 * sig2) - nrow(C) * log(2 * pi)/2 - nrow(C) * log(sig2)/2 - detC/2
 			return(logLik)
-		}    	
+		}
+		C <- vcvPhylo(tree)
+		if (any(tree$edge.length <= (10 * .Machine$double.eps))) 
+		stop("some branch lengths are 0 or nearly zero")
+		invC <- solve(C)
+		detC <- determinant(C, logarithm = TRUE)$modulus[1]    	
 	}
 	else{
 	    likelihood <- function(C, invC, detC, x, sig2, a, y) {
@@ -349,27 +354,33 @@ mcmc.gibbs4 <- function (tree, x,alter_ind, D, prior_tbl,true_anc,ngen = 100000,
 
 	# priors
 	log.prior <- function(sig2, a, y) {
-	prior_sig2 <- sum(dcauchy(sig2, loc=0,scale=1, log = TRUE) )
-	# + sum(dnorm(c(a, y), mean = pr.mean[2:length(pr.mean)], sd = sqrt(pr.var[1 + 1:tree$Nnode]), log = TRUE))
-	# prior_tbl = calc_prior_dist_root_calibration(D,sig2)
-	prior_root = sum(dnorm(c(a), mean = prior_tbl[,1], sd = prior_tbl[,2], log = T))
-	prior_anc = sum(dnorm(c(a, y), mean = 0, sd = 100, log = T))
-	return(prior_sig2+prior_root+prior_anc)
+		prior_sig2 <- sum(dcauchy(sig2, loc=0,scale=1, log = TRUE) )
+		# + sum(dnorm(c(a, y), mean = pr.mean[2:length(pr.mean)], sd = sqrt(pr.var[1 + 1:tree$Nnode]), log = TRUE))
+		# prior_tbl = calc_prior_dist_root_calibration(D,sig2)
+		prior_root = sum(dnorm(c(a), mean = prior_tbl[,1], sd = prior_tbl[,2], log = T))
+		prior_anc = sum(dnorm(c(a, y), mean = 0, sd = 100, log = T))
+		return(prior_sig2+prior_root+prior_anc)
 	}
 
-	C <- vcvPhylo(tree)
-	if (any(tree$edge.length <= (10 * .Machine$double.eps))) 
-	stop("some branch lengths are 0 or nearly zero")
-	invC <- solve(C)
-	detC <- determinant(C, logarithm = TRUE)$modulus[1]
 	x <- x[tree$tip.label]
-	if (is.null(names(y))) 
-	names(y) <- length(tree$tip) + 2:tree$Nnode
-	else y[as.character(length(tree$tip) + 2:tree$Nnode)]
-	# L <- likelihood(C, invC, detC, x, sig2[1], a, y)
+	if (is.null(names(y))) {
+		names(y) <- length(tree$tip) + 2:tree$Nnode
+	}
+	else {y[as.character(length(tree$tip) + 2:tree$Nnode)]}
+
 	L  <- newlnLike(tree, c(x, a, y), sig2[ind_sig2],D)
-	# print (c(L,sum(L1)))
 	Pr <- log.prior(sig2, a, y)
+
+
+	IND_edge = c()
+        for (ind_edge in tree$edge[,2]){
+		if (ind_edge>ntips){
+			ind_edge_t=ind_edge-1
+		}else{ind_edge_t=ind_edge}
+        	IND_edge = append(IND_edge,ind_edge_t)
+        }
+
+
 
 	# START MCMC
 	for (i in 1:ngen) {
@@ -382,34 +393,24 @@ mcmc.gibbs4 <- function (tree, x,alter_ind, D, prior_tbl,true_anc,ngen = 100000,
 		gibbs=0
 		hastings=0
     	    	
-		mean_sig = rbind(mean_sig,sig2[ind_sig2])
 		
-		if (i%%print_f == 0 || i==1) {
-			cat(c("\n",i,round(c(sum(L),sig2),2),"\n",ind_sig2))
-			start = round(dim(mean_sig)[1]*0.1)
-			end = dim(mean_sig)[1]
-    		        rates_temp = apply(mean_sig[start:end,], 2, FUN=mean)
-			#rates_temp = sig2[ind_sig2]
-    		        rates = c()
-		        
-    		        for (ind_edge in tree$edge[,2]){
-				if (ind_edge>ntips){
-					ind_edge_t=ind_edge-1
-				}else{ind_edge_t=ind_edge}
-    		        	rates = append(rates,rates_temp[ind_edge_t])
-    		        }
-		        	    
-    		        plot.phylo(tree, edge.width=rates*3, main=paste("lik:",round(sum(L),2),"cat:",length(sig2)))
-			
+		if (dynamicPlot == T){
+			mean_sig = rbind(mean_sig,sig2[ind_sig2])
+		
+			if (i%%print_f == 0 || i==1) {
+				cat(c("\n",i,round(c(sum(L),sig2),2),"\n",ind_sig2))
+				start = round(dim(mean_sig)[1]*0.1)
+				end = dim(mean_sig)[1]
+	    		        rates_temp = apply(mean_sig[start:end,], 2, FUN=mean)
+	    		        plot.phylo(tree, edge.width=rates_temp[IND_edge]*3, main=paste("lik:",round(sum(L),2),"cat:",length(sig2)),show.tip.label = F)
+			}
 		}
     
 		j <- (i - 1)%%(tree$Nnode + 1)
-		#if (j == 0) {
 		rr= runif(1,0,1)
 		
 		update_sig_freq=0.9
 		if (rr<update_sig_freq) {
-			#sig2.prime <-  abs(sig2 + rnorm(n = 1, sd = sqrt(con$prop[j + 1]))) 
 			if (runif(1,0,1)>0.5){
 				s_ind  = sample(1:length(sig2),1)
 				sig2_update <-  update_multiplier_proposal(sig2.prime[s_ind],1.2)
@@ -464,10 +465,10 @@ mcmc.gibbs4 <- function (tree, x,alter_ind, D, prior_tbl,true_anc,ngen = 100000,
 			sig2 = sig2.prime
 		}
  
- 
 	     if (i%%sample == 0) {
-		    rel_err =  (c(a, y) - true_anc)
-		    cat(c(i,sum(L)+sum(Pr), sum(L),sum(Pr), mean(sig2[ind_sig2]), length(sig2), a, alpha_par_Dir, sig2[ind_sig2], y, "\n"),sep="\t", file=logfile, append=T) 
+			rates_temp=sig2[ind_sig2]
+			#   rel_err =  (c(a, y) - true_anc)
+			cat(c(i,sum(L)+sum(Pr), sum(L),sum(Pr), mean(sig2[ind_sig2]), length(sig2), a, alpha_par_Dir, rates_temp[IND_edge], y, "\n"),sep="\t", file=logfile, append=T) 
 	    }
     
 }
@@ -534,7 +535,7 @@ sim_data <- function(ntips=20,s2=0.1,variable_rate=0){
 	full_data <- sim.rates(ttree, sig2=sigmas2, anc=0, nsim=1, internal=T, plot=T)
 	#edgelabels()
 	#nodelabels()
-	plot.phylo(tree, edge.width=sigmas2*3)
+	plot.phylo(tree, edge.width=sigmas2*3,show.tip.label = F)
 	print(sigmas2)
 	
 	#alter_ind = tree$edge[alter,2]
@@ -552,7 +553,7 @@ get_time <- function(){
 	return(sum(as.numeric(strsplit(format(Sys.time(), "%X"),":")[[1]])*c(3600,60,1)))
 }
 
-start_MCMC <- function(w_dir,sim_n,sig2,ntips,ngenerations,sampling_f,nGibbs_gen,Gibbs_sample,root_calibration = c(0,100), plot_res = F){
+start_MCMC_sim <- function(w_dir,sim_n,sig2,ntips,ngenerations,sampling_f,nGibbs_gen,Gibbs_sample,root_calibration = c(0,100), plot_res = F){
 	setwd(w_dir)
 	S = sim_data(ntips=ntips,s2=sig2,variable_rate=var_rate)
 	tree= S[[1]]
@@ -572,8 +573,8 @@ start_MCMC <- function(w_dir,sim_n,sig2,ntips,ngenerations,sampling_f,nGibbs_gen
 
 	t1 = get_time()
 	logfile3 = sprintf("sim_%s_s2_%s_n_%s.log", sim_n, sig2, ntips)
-	mcmc.gibbs4(tree, data,alter_ind, D, prior_tbl, true_anc, ngen= nGibbs_gen,gibbs_sampler=T,useVCV=F,logfile=logfile3,update_sig_freq=0.5,sample=Gibbs_sample,useDPP=T)
-	cat("\nTime Gibbs:", get_time() - t1, sep="\t", file = time_file,append=T)
+	mcmc.gibbs4(tree, data,alter_ind, D, prior_tbl, true_anc, ngen= nGibbs_gen,gibbs_sampler=T,useVCV=F,logfile=logfile3,update_sig_freq=0.5,sample=Gibbs_sample,useDPP=T,dynamicPlot= T)
+	cat("\nTime Gibbs:", get_time() - t1, sep="\t")
 
 	if (plot_res==T){
 		plot_traitgram <-function(logfile,add=F,col="black"){
@@ -595,6 +596,29 @@ start_MCMC <- function(w_dir,sim_n,sig2,ntips,ngenerations,sampling_f,nGibbs_gen
 	}
 }
 
+start_MCMC_data <- function(w_dir,tree_file,data_file,prior_file,ngenerations,sampling_f,nGibbs_gen,Gibbs_sample,root_calibration = c(0,100), plot_res = F){
+	setwd(w_dir)
+	tree= read.tree(tree_file)
+	ntips = length(tree$tip.label)
+	raw_data= read.table(data_file,head=T)
+	data = raw_data[,2]
+	names(data) = raw_data[,1]
+	D <- build_table(tree, ntips,data)
+	BR= branching.times(tree) # sorted from root to most recent
+	dist_from_root = max(BR)-BR
+
+	### LOG rel err
+	prior_tbl = read.table(prior_file) #get_calibration_tbl(D,root_calibration)
+	prior_tbl = get_calibration_tbl(D,root_calibration)	
+	
+	print("Starting MCMC...")
+	t1 = get_time()
+	
+	logfile3 = sprintf("%s_mcmc.log", strsplit(tree_file,".",fixed =T)[1])
+	mcmc.gibbs4(tree, as.vector(data),alter_ind, D, prior_tbl, ngen= nGibbs_gen,gibbs_sampler=T,useVCV=F,logfile=logfile3,update_sig_freq=0.5,sample=Gibbs_sample,useDPP=T,dynamicPlot= T)
+	cat("\nRun time:", get_time() - t1, sep="\t")
+
+}
 
 
 
@@ -612,7 +636,7 @@ Gibbs_sample  = as.integer(arg[8])     # sampling freq Gibbs
 #plot_res= F
 #root_calibration =c(0,100)
 
-start_MCMC(w_dir, sim_n, sig2, ntips,ngen,sample,nGibbs_gen,Gibbs_sample)
+start_MCMC_sim(w_dir, sim_n, sig2, ntips,ngen,sample,nGibbs_gen,Gibbs_sample)
 
 #___	start_MCMC("/Users/daniele/Documents/projects/fossilBM/", 1, 0.2, ntips=100,ngenerations=1000000,sampling_f=2000,nGibbs_gen=250000,Gibbs_sample=500)
 #___	"/Users/daniele/Documents/projects/fossilBM/" 1 0.2 100 1000000 2000 250000 100
@@ -625,22 +649,26 @@ sim_n            = 1
 sig2             = 0.1
 ntips            = 100
 ngen             = 5000
-sample           = 10
 nGibbs_gen       = 250000
 Gibbs_sample     = 100
 root_calibration = c(0,100)
-var_rate         = 2
+var_rate         = 1
 print_f          = 100
 useDPP           = T
-
-#___	
-#___	
-#___	
-#___	ngenerations = 50000
-#___	sampling_f = 10
-#___	
+dynamicPlot      = T
 
 
+# empirical
+w_dir = "/Users/daniele/Dropbox-personal/Dropbox/fossilbm/data/"
+data_file = "latitude_mean.txt"
+tree_file  = "tree_used.tre"
 
-##
+
+
+
+
+
+
+
+
 
