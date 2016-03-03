@@ -15,13 +15,13 @@ library(optparse)
 ##################################################
 
 option_list <- list(                   
-	make_option("--n",  type="integer", default=250000,help=("MCMC iterations (%default)"),metavar="iterations"),
-	make_option("--t",  type="integer", default=50,help=("Tree size (%default)"),metavar="ntips"),
-	make_option("--v",  type="double", default=16,help=("Magnitude rate shift (%default)"),metavar="xfold"),    
-	make_option("--r",  type="double", default=0.1,help=("Baseline rate (%default)"),metavar="rate"),    
-	make_option("--j",  type="integer", default=1,help=("Replicate (%default)"),metavar="replicate"),
+	make_option("--n",  type="integer",   default=250000,help=("MCMC iterations (%default)"),metavar="iterations"),
+	make_option("--t",  type="integer",   default=50,help=("Tree size (%default)"),metavar="ntips"),
+	make_option("--v",  type="double",    default=16,help=("Magnitude rate shift (%default)"),metavar="xfold"),    
+	make_option("--r",  type="double",    default=0.1,help=("Baseline rate (%default)"),metavar="rate"),    
+	make_option("--j",  type="integer",   default=1,help=("Replicate (%default)"),metavar="replicate"),
 	make_option("--wd", type="character", default="",help=("working dir"),metavar="wd"),
-	make_option("--s",  type="integer", default=1,help=("no. shifts (%default)"),metavar="shifts")
+	make_option("--s",  type="integer",   default=1,help=("no. shifts (%default)"),metavar="shifts")
 )
 
 parser_object <- OptionParser(usage = "Usage: %prog [Options]", option_list=option_list, description="...")
@@ -39,6 +39,24 @@ rep              = opt$options$j
 sim_n            = 1
 sig2             = opt$options$r
 n_shifts         = opt$options$s
+
+### TEMP SETTINGS
+ntips            = 25
+nGibbs_gen       = 10000
+Gibbs_sample     = 50
+root_calibration = c(0,0.05)
+print_f          = 500
+xfold            = 1
+dynamicPlot      = T
+w_dir            = "/Users/daniele/Dropbox-personal/Dropbox/fossilizedBM"
+rep              = 1
+sim_n            = 1
+sig2             = 0.1
+n_shifts         = 1
+
+
+
+
 setwd(w_dir)
 
 update_multiplier_proposal <- function(i,d){
@@ -65,8 +83,7 @@ fN2<-function(xa, xb, vpa, vpb, sigma2_a,sigma2_b, anc) {
 	#return(-(((xa - anc)^2 / vpa) + ((xb - anc)^2 / vpb)) / (2 * sigma2) - log(sqrt(2 * pi * sigma2 * (vpa + vpb))));
 }
 
-newlnLike<-function(tree, vector_tip_root_nodes_values, sigma2,D) {
-	
+newlnLike<-function(tree, vector_tip_root_nodes_values, sigma2,D,mu0) {
 	#S_vec=rep(0,10000)
         #vec_values = vector_tip_root_nodes_values
         #
@@ -104,8 +121,8 @@ newlnLike<-function(tree, vector_tip_root_nodes_values, sigma2,D) {
 	a_ind_v[a_ind_v>ntips] =a_ind_v[a_ind_v>ntips]-1
 	b_ind_v[b_ind_v>ntips] =b_ind_v[b_ind_v>ntips]-1
 	
-        L1 = dnorm(a_v, mean=anc_v, sd= sqrt(vpa_v*sigma2[a_ind_v]),log=T)
-        L2 = dnorm(b_v, mean=anc_v, sd= sqrt(vpb_v*sigma2[b_ind_v]),log=T)  
+        L1 = dnorm(a_v, mean=(anc_v+mu0[a_ind_v]*vpa_v), sd= sqrt(vpa_v*sigma2[a_ind_v]),log=T)
+        L2 = dnorm(b_v, mean=(anc_v+mu0[b_ind_v]*vpb_v), sd= sqrt(vpb_v*sigma2[b_ind_v]),log=T)  
          
         L = L1+L2
 	return(L) 
@@ -114,7 +131,6 @@ newlnLike<-function(tree, vector_tip_root_nodes_values, sigma2,D) {
 	#return(lik) 
   
 }
-
 
 build_table <- function (tree,ntips,data){
 
@@ -153,8 +169,7 @@ get_joint_mu_s2 <- function (mu_f,s2_f,mu_g,s2_g){
 	return(c(mu_fg,s2_fg))
 }
 
-runGibbs <- function(sigma2, vector_tip_root_nodes_values,D,prior_tbl,get_expected=0) {
-	
+runGibbs <- function(sigma2, vector_tip_root_nodes_values,D,prior_tbl,mu0,get_expected=0) {
 	#prior_tbl = calc_prior_dist_root_calibration(D,sigma2)
 	
 	vec_values = vector_tip_root_nodes_values
@@ -185,7 +200,7 @@ runGibbs <- function(sigma2, vector_tip_root_nodes_values,D,prior_tbl,get_expect
 		
 		#desc_lik = get_joint_mu_s2(a+vpa, vpa*sigma2[sig_a_ind], b, (vpb)*sigma2[sig_b_ind])
 
-		desc_lik = get_joint_mu_s2(a, (vpa)*sigma2[sig_a_ind], b, (vpb)*sigma2[sig_b_ind])
+		desc_lik = get_joint_mu_s2((a-vpa*mu0[sig_a_ind]), (vpa)*sigma2[sig_a_ind], (b-vpb*mu0[sig_b_ind]), (vpb)*sigma2[sig_b_ind])
 		prior_prm = prior_tbl[which(rownames(prior_tbl)==anc_ind),]
 		
 		# lik from (stem) ancestral state
@@ -205,7 +220,7 @@ runGibbs <- function(sigma2, vector_tip_root_nodes_values,D,prior_tbl,get_expect
 			
 			
 			stem_val = vec_values[stem_ind]		
-			stem_lik = c(stem_val, (stem_brl)*sigma2[sig_stem_ind])
+			stem_lik = c((stem_val + stem_brl*mu0[sig_stem_ind]) , (stem_brl)*sigma2[sig_stem_ind])
 			
 			lik_val = get_joint_mu_s2(stem_lik[1],stem_lik[2],desc_lik[1],desc_lik[2])
 
@@ -220,8 +235,16 @@ runGibbs <- function(sigma2, vector_tip_root_nodes_values,D,prior_tbl,get_expect
 	return(vec_values[D[,1]] )
 }
 
+calc_prior <- function(sig2, a, y, mu0) {
+	#prior_sig2 <- sum(dcauchy(sig2, loc=0,scale=1, log = TRUE) )
+	prior_sig2 = sum(dexp(sig2, 0.5, log = TRUE) ) #sum(dgamma(sig2, 2,1, log = TRUE) )
+	prior_root = sum(dnorm(c(a), mean = prior_tbl[,1], sd = prior_tbl[,2], log = T))
+	prior_anc  = sum(dnorm(c(a, y), mean = 0, sd = 100, log = T))
+	prior_mu0  = sum(dnorm(mu0, mean = 0, sd = 10, log = T))
+	return(prior_sig2+prior_root+prior_anc+prior_mu0)
+}
 
-################ DPP GIBBS SAMPLER
+################ BDMCMC SAMPLER
 
 calc_rel_prob <- function(log_lik){
 	rel_prob=exp(log_lik-max(log_lik))
@@ -236,11 +259,9 @@ random_choice_P <-function(vector){
 	return (c(vector[ind], ind))
 }
 
-################ DPP GIBBS SAMPLER
-
-calc_deathRates <- function (tree, trait_states, sig2, ind_sig,D,IND_edge,new_ind,desc_index_list){
+calc_deathRates <- function (tree, trait_states, sig2, ind_sig, mu0, ind_mu0,D,IND_edge,new_ind,desc_index_list){
 	list_deathrates=c(0) # can't kill first
-	current_lik = sum(newlnLike(tree, trait_states, sig2[ind_sig],D))
+	current_lik = sum(newlnLike(tree, trait_states, sig2[ind_sig],D,mu0[ind_mu0]))
 	#print(length(current_lik))
 	#__ par(mfrow=c(1,length(unique(ind_sig))-1))
 	for (i in 2:length(unique(ind_sig))){
@@ -270,14 +291,14 @@ calc_deathRates <- function (tree, trait_states, sig2, ind_sig,D,IND_edge,new_in
 		#trait_states_temp = trait_states
 		#trait_states_temp[(ntips+1):length(trait_states)] = c(a.prime,y.prime)			
 		
-		list_deathrates[i] = sum(newlnLike(tree, trait_states, rates_temp,D))
+		list_deathrates[i] = sum(newlnLike(tree, trait_states, rates_temp,D,mu0[ind_mu0]))
 	}
 	list_deathrates = exp(list_deathrates - current_lik)
 	list_deathrates[1] = 0
 	return(list_deathrates)
 }
 
-run_BDMCMC <- function(tree, trait_states, sig2, ind_sig,D,IND_edge,new_ind,desc_index_list){
+run_BDMCMC <- function(tree, trait_states, sig2, ind_sig, mu0, ind_mu0,D,IND_edge,new_ind,desc_index_list){
 	cont_time=0
 	len_cont_time=1
 	birthRate=1
@@ -296,7 +317,7 @@ run_BDMCMC <- function(tree, trait_states, sig2, ind_sig,D,IND_edge,new_ind,desc
 		#print( length(unique(ind_sig)))
 		
 		if (length(unique(ind_sig))>1){
-			deathRate = calc_deathRates(tree, trait_states, sig2, ind_sig,D,IND_edge,new_ind,desc_index_list)
+			deathRate = calc_deathRates(tree, trait_states, sig2, ind_sig, mu0, ind_mu0, D,IND_edge,new_ind,desc_index_list)
 		}
 		
 		deltaRate=sum(deathRate)
@@ -333,6 +354,7 @@ run_BDMCMC <- function(tree, trait_states, sig2, ind_sig,D,IND_edge,new_ind,desc
 					#print(c(j,multi_ind_new[j]))
 					if (multi_ind_new[j]==split_ind){multi_ind_new[j] = max(ind_sig)+1}
 				}
+				cat()
 				#___ # alternative - NO LOOP
 				#___ multi_ind_new[which(ind_desc==split_ind)] =  max(ind_sig)+1
 				
@@ -420,59 +442,21 @@ run_BDMCMC <- function(tree, trait_states, sig2, ind_sig,D,IND_edge,new_ind,desc
 }
 
 ################################## START MCMC ###################################
-mcmc.gibbs4 <- function (tree, x,alter_ind, D, prior_tbl,true_rate,ngen = 100000, control = list(), gibbs_sampler=T,useVCV=F, sample=100,logfile="log",update_sig_freq=0.5,useDPP=F,dynamicPlot = F,useFixPart=F,bdmcmc_freq=0.75){
+mcmc.gibbs4 <- function (tree, x, D, prior_tbl,true_rate,ngen = 100000, control = list(),useVCV=F, sample=100,logfile="log",update_sig_freq=0.5,dynamicPlot = F,useFixPart=F,bdmcmc_freq=0.75,useTrend=F){
 	x=data
 	TE=as.matrix(tree$edge)
-	cat(c("it", "posterior","likelihood","prior", "sig2", "MAPE","sdAPE","K", paste("sig2", 1:length(TE[,1]),sep="_"), paste("anc",D[,1],sep="_"),"\n"),sep="\t", file=logfile, append=F)
+	cat(c("it", "posterior","likelihood","prior", "sig2", "mu0", "MAPE","sdAPE","K", paste("sig2", 1:length(TE[,1]),sep="_"), paste("anc",D[,1],sep="_"),"\n"),sep="\t", file=logfile, append=F)
 	a <- 0
 	y <- rep(0, tree$Nnode - 1)
-	sig2 <- c(0.2) # rep(0.2, length(c(x,  y))) # 
-	ind_sig2 <- rep(1, length(c(x, y))) #1:length(c(x, y)) #
+	sig2 <- c(0.2)  
+	mu0 <- 0
+	ind_sig2 <- rep(1, length(c(x, y)))
+	ind_mu0  <- rep(1, length(c(x, y)))
 	mean_sig <- rep(0, length(c(x, y)))
 	mean_anc <- rep(0, length(c(a, y)))
 	if (dynamicPlot == T){dev.new()}
 	
-	if (useFixPart==T){
-		sig2 = c(0.2,1)
-		new_alter_ind = tree$edge[alter_ind,2]
-		new_alter_ind[new_alter_ind>ntips] = new_alter_ind[new_alter_ind>ntips]-1
-		ind_sig2[new_alter_ind] = 2
-	}
-		
 	#names(ind_sig2) = c(names(x), D[-1,1])
-	alpha_par_Dir = 0.2
-
-	# lik function
-	if (useVCV ==T){
-		temp <- phyl.vcv(as.matrix(x), vcv(tree), 1)
-		likelihood <- function(C, invC, detC, x, sig2, a, y) {
-			z <- c(x, y) - a
-			logLik <- -z %*% invC %*% z/(2 * sig2) - nrow(C) * log(2 * pi)/2 - nrow(C) * log(sig2)/2 - detC/2
-			return(logLik)
-		}
-		C <- vcvPhylo(tree)
-		if (any(tree$edge.length <= (10 * .Machine$double.eps))) 
-		stop("some branch lengths are 0 or nearly zero")
-		invC <- solve(C)
-		detC <- determinant(C, logarithm = TRUE)$modulus[1]    	
-	}
-	else{
-	    likelihood <- function(C, invC, detC, x, sig2, a, y) {
-		vector_tip_root_nodes_values = c(x, a, y)
-		return(sum(newlnLike(tree, vector_tip_root_nodes_values, sig2,D)))
-		}    	
-	}
-
-	# priors
-	log.prior <- function(sig2, a, y) {
-		#prior_sig2 <- sum(dcauchy(sig2, loc=0,scale=1, log = TRUE) )
-		prior_sig2 <- sum(dexp(sig2, 0.5, log = TRUE) ) #sum(dgamma(sig2, 2,1, log = TRUE) )
-		# + sum(dnorm(c(a, y), mean = pr.mean[2:length(pr.mean)], sd = sqrt(pr.var[1 + 1:tree$Nnode]), log = TRUE))
-		# prior_tbl = calc_prior_dist_root_calibration(D,sig2)
-		prior_root = sum(dnorm(c(a), mean = prior_tbl[,1], sd = prior_tbl[,2], log = T))
-		prior_anc = sum(dnorm(c(a, y), mean = 0, sd = 100, log = T))
-		return(prior_sig2+prior_root+prior_anc)
-	}
 
 	x <- x[tree$tip.label]
 	if (is.null(names(y))) {
@@ -480,8 +464,8 @@ mcmc.gibbs4 <- function (tree, x,alter_ind, D, prior_tbl,true_rate,ngen = 100000
 	}
 	else {y[as.character(length(tree$tip) + 2:tree$Nnode)]}
 
-	L  <- newlnLike(tree, c(x, a, y), sig2[ind_sig2],D)
-	Pr <- log.prior(sig2, a, y)
+	L  <- newlnLike(tree, c(x, a, y), sig2[ind_sig2],D,mu0[ind_mu0])
+	Pr <- calc_prior(sig2, a, y,mu0)
 
 
 	# get indexes
@@ -509,8 +493,6 @@ mcmc.gibbs4 <- function (tree, x,alter_ind, D, prior_tbl,true_rate,ngen = 100000
 		desc_index_list[[i]] = unique(c(i,ind_desc_edges))
 	}
 
-
-
 	# START MCMC
 	for (i in 1:ngen) {
     
@@ -519,17 +501,18 @@ mcmc.gibbs4 <- function (tree, x,alter_ind, D, prior_tbl,true_rate,ngen = 100000
 		Pr.prime    = Pr
 		a.prime     = a
 		sig2.prime  = sig2
+		mu0.prime   = mu0
 		gibbs=0
 		hastings=0
     	    	
-		
+		# SCREEN OUTPUT / DYNAMIC PLOTS
 		if (dynamicPlot == T){
 			mean_sig = rbind(mean_sig,sig2[ind_sig2])
 			#mean_anc = rbind(mean_anc,c(x,a,y))
 			mean_anc = rbind(mean_anc,c(a,y))
 		
 			if (i%%print_f == 0 || i==1) {
-				cat(c("\n",i,round(c(sum(L),sig2),2))) #,"\n",ind_sig2 )) 
+				cat(c("\n",i,round(c(sum(L),sig2,mu0),2)))
 				par(mfrow=c(1,2))
 				start = round(dim(mean_sig)[1]*0.1)
 				end = dim(mean_sig)[1]
@@ -539,7 +522,8 @@ mcmc.gibbs4 <- function (tree, x,alter_ind, D, prior_tbl,true_rate,ngen = 100000
 				
 	    		        rates_temp =sig2.prime[ind_sig2]
 	    		        plot.phylo(tree, edge.width=rates_temp[IND_edge]*3, main=paste("lik:",round(sum(L),2),"cat:",length(unique(ind_sig2))),show.tip.label = F)
-
+				
+				#phenogram(tree, c(x,a,y),ylim=c(-1,1)) #,add=add,col=col	
 				# delta anc-states
 				#start = round(dim(mean_anc)[1]*0.1)
 				#end = dim(mean_anc)[1]
@@ -555,58 +539,52 @@ mcmc.gibbs4 <- function (tree, x,alter_ind, D, prior_tbl,true_rate,ngen = 100000
 		}
     
 		j <- (i - 1)%%(tree$Nnode + 1)
-		rr= runif(1,0,1)
+		rr= runif(2,0,1)
 		
 		update_sig_freq=0.5
-		if (rr<update_sig_freq) {
-			if (runif(1,0,1)>.5){
+		if (rr[1]<update_sig_freq) {
+			if (rr[2]<0.33){ # SIG2 UPDATE
 				s_ind  = sample(1:length(sig2),1)
 				sig2_update <-  update_multiplier_proposal(sig2.prime[s_ind],1.2)
 				sig2.prime[s_ind] = sig2_update[1]
 				hastings = sig2_update[2]			
 			}
-			else{
+			else if (rr[2]<0.66 && useTrend==T){ # MU0 UPDATE
+				m_ind  = sample(1:length(mu0),1)
+				mu0_update <-  mu0[m_ind] + rnorm(n = 1, sd = 0.5)
+				mu0.prime[m_ind] = mu0_update
+			}
+			else{ # ROOT STATE
 				a.prime <- a + rnorm(n = 1, sd = 0.5) #sqrt(con$prop[j + 1]))
 			}
 		}
 		 else{
-			  # ANC STATES
-			if (gibbs_sampler==F){
-				k <- j - 1
-				y.prime <- y
-				y.prime[k] <- y[k] + rnorm(n = 1, sd = 0.5) #sqrt(con$prop[j + 1]))	
-			} 
-			else {
-				if (runif(1,0,1)<bdmcmc_freq){
-					trait_states=c(x, a.prime, y.prime)
-					bdmcmc_list   = run_BDMCMC(tree, trait_states, sig2.prime,ind_sig2,D,IND_edge,new_ind,desc_index_list)
-					sig2.prime    = bdmcmc_list[[1]]
-					ind_sig2      = bdmcmc_list[[2]]
-					gibbs=1
-				}#else{
-				vector_tip_root_nodes_values = c(x, a.prime, y.prime)
-				y_temp = runGibbs(sig2.prime[ind_sig2], vector_tip_root_nodes_values,D,prior_tbl,get_expected=0)
-				a.prime= y_temp[1]
-				y.prime= y_temp[-1]
+			# ANC STATES
+			if (runif(1,0,1)<bdmcmc_freq){
+				trait_states=c(x, a.prime, y.prime)
+				bdmcmc_list   = run_BDMCMC(tree, trait_states, sig2.prime,ind_sig2, mu0.prime, ind_mu0,D,IND_edge,new_ind,desc_index_list)
+				sig2.prime    = bdmcmc_list[[1]]
+				ind_sig2      = bdmcmc_list[[2]]
 				gibbs=1
-				#}
-				
-				
 			}
-
+			vector_tip_root_nodes_values = c(x, a.prime, y.prime)
+			y_temp = runGibbs(sig2.prime[ind_sig2], vector_tip_root_nodes_values,D,prior_tbl,mu0.prime[ind_mu0],get_expected=0)
+			a.prime= y_temp[1]
+			y.prime= y_temp[-1]
+			gibbs=1
 		}
 
 	       # calc post
-		L.prime <- newlnLike(tree, c(x, a.prime, y.prime), sig2.prime[ind_sig2],D)
-	
-		Pr.prime <- log.prior(sig2.prime, a.prime, y.prime)
+		L.prime <- newlnLike(tree, c(x, a.prime, y.prime), sig2.prime[ind_sig2],D,mu0.prime[ind_mu0])	
+		Pr.prime <- calc_prior(sig2.prime, a.prime, y.prime, mu0.prime)
 	
 		if ( (sum(Pr.prime) + sum(L.prime) - sum(Pr) - sum(L) + hastings) >= log(runif(1,0,1)) || gibbs==1){    
-			y =    y.prime
-			L =    L.prime
-			Pr =   Pr.prime
-			a =    a.prime
+			y    = y.prime
+			L    = L.prime
+			Pr   = Pr.prime
+			a    = a.prime
 			sig2 = sig2.prime
+			mu0  = mu0.prime
 		}
  
 	     if (i%%sample == 0) {
@@ -615,7 +593,7 @@ mcmc.gibbs4 <- function (tree, x,alter_ind, D, prior_tbl,true_rate,ngen = 100000
 			#MAE = mean(abs(c(a, y)-true_anc))
 			MAPE = mean(abs((rates_temp[IND_edge]-true_rate))/true_rate)
 			sdAPE = sd(abs((rates_temp[IND_edge]-true_rate))/true_rate)
-			cat(c(i,sum(L)+sum(Pr), sum(L),sum(Pr), mean(sig2[ind_sig2]), MAPE, sdAPE, length(sig2), rates_temp[IND_edge], a, y, "\n"),sep="\t", file=logfile, append=T) 
+			cat(c(i,sum(L)+sum(Pr), sum(L),sum(Pr), mean(sig2[ind_sig2]),mean(mu0[ind_mu0]), MAPE, sdAPE, length(sig2), rates_temp[IND_edge], a, y, "\n"),sep="\t", file=logfile, append=T) 
 	    }
     
 }
@@ -624,6 +602,49 @@ mcmc.gibbs4 <- function (tree, x,alter_ind, D, prior_tbl,true_rate,ngen = 100000
 ################################## END   MCMC ###################################
 
 ############################### SIMULATE DATA #######################################
+sim_data_bmt <- function(ntips=20,s2=0.1,m0=0,root_value=0){
+	tree<-ladderize(pbtree(n=ntips, scale=1))
+	D = build_table(tree,ntips,data=NULL)
+	D = as.data.frame(D)
+	D = cbind(D,rep(0,ntips-1))
+	D = cbind(D,rep(0,ntips-1))
+	D = cbind(D,rep(0,ntips-1))
+	colnames(D)[6]="val0"
+	colnames(D)[7]="val1"
+	colnames(D)[8]="val2"
+	
+	tip_data=rep(0,ntips)
+	
+	for (node_ind in 1:length(D$ancestor)){
+		node =	D$ancestor[node_ind]
+		if (node==1){
+			anc_val = root_value
+		}else{anc_val = D$val0[node_ind]}
+		
+		br_lengths=c(D$branch.length1,D$branch.length2)
+		desc_val = round(anc_val + rnorm(n=2,mean=br_lengths*m0,sd=br_lengths*s2),3)
+		desc1_id = D$descendant1[node_ind]
+		desc2_id = D$descendant2[node_ind]
+		
+		D$val1[node_ind]=desc_val[1]
+		D$val2[node_ind]=desc_val[2]
+		
+		if (desc1_id>ntips){
+			D$val0[which(D$ancestor==desc1_id)] = desc_val[1]
+		}else{tip_data[desc1_id]= desc_val[1]}
+		
+		if (desc2_id>ntips){
+			D$val0[which(D$ancestor==desc2_id)] = desc_val[2]
+		}else{tip_data[desc2_id]= desc_val[2]}
+		
+	}
+	all_data = c(tip_data, D$val0)
+	all_names = c(tree$tip.label,D$ancestor)
+	names(all_data) = all_names
+	phenogram(tree, all_data,add=F, col=col, main="Traigram")
+	return(c(tree,all_data,sigmas2,mu0))
+}
+
 sim_data <- function(ntips=20,s2=0.1,xfold=16,n_shifts=1){
 	print("Simulating trees")
 	tree<-ladderize(pbtree(n=ntips, scale=1))
@@ -704,7 +725,7 @@ sim_data <- function(ntips=20,s2=0.1,xfold=16,n_shifts=1){
 	#tree$edge = tree$edge*100
 	phenogram(ttree, full_data,add=F, col=col, main="Traigram")
 	
-	return(c(tree,full_data,ind_desc_edges,sigmas2))
+	return(c(tree,full_data,sigmas2))
 }
 
 get_time <- function(){
@@ -714,7 +735,11 @@ get_time <- function(){
 start_MCMC_sim <- function(w_dir,sim_n,sig2,ntips,ngenerations,sampling_f,nGibbs_gen,Gibbs_sample,root_calibration = c(0,100), plot_res = F){
 	setwd(w_dir)
 	ntips =50
-	S = sim_data(ntips=ntips,s2=0.1,xfold=16)
+	S = sim_data(ntips=ntips,s2=0.1,xfold=1,n_shifts=0)
+	
+	## SIM WITH TREND
+	S = sim_data_bmt(ntips=ntips,s2=0.1,m0=0,root_value=0)
+	
 	tree= S[[1]]
 	full_data= S[[2]]
 	data <- S[[2]][names(S[[2]]) %in% tree$tip.label]
@@ -723,19 +748,15 @@ start_MCMC_sim <- function(w_dir,sim_n,sig2,ntips,ngenerations,sampling_f,nGibbs
 	BR= branching.times(tree) # sorted from root to most recent
 	dist_from_root = max(BR)-BR
 	#phenogram(tree, full_data,add=F, col=rep("black",length(full_data)))
-	alter_ind= S[[3]]
-	true_sigmas = S[[4]]
+	true_sigmas = S[[3]]
 
 	### LOG rel err
 	prior_tbl = get_calibration_tbl(D,root_calibration)
 	
-	print("Starting MCMC...")
-
-	t1 = get_time()
 	logfile3 = sprintf("sim_%s_s2_%s_n_%s.log", sim_n, sig2, ntips)
-	mcmc.gibbs4(tree, data,alter_ind, D, prior_tbl, true_anc=true_sigmas, ngen= nGibbs_gen,gibbs_sampler=T,useVCV=F,
-		logfile=logfile3,update_sig_freq=0.5,sample=Gibbs_sample,useDPP=F,dynamicPlot= T,useFixPart=F)
-	cat("\nTime Gibbs:", get_time() - t1, sep="\t")
+	mcmc.gibbs4(tree, data, D, prior_tbl, true_rate=true_sigmas, ngen= nGibbs_gen,useVCV=F,
+		logfile=logfile3,update_sig_freq=0.5,sample=Gibbs_sample,dynamicPlot= F,bdmcmc_freq=0,useTrend=T)
+
 
 	if (plot_res==T){
 		plot_traitgram <-function(logfile,add=F,col="black"){
@@ -776,7 +797,7 @@ start_MCMC_data <- function(w_dir,tree_file,data_file,prior_file,ngenerations,sa
 	t1 = get_time()
 	
 	logfile3 = sprintf("%s_mcmc.log", strsplit(tree_file,".",fixed =T)[1])
-	mcmc.gibbs4(tree, as.vector(data),alter_ind, D, prior_tbl, ngen= nGibbs_gen,gibbs_sampler=T,useVCV=F,logfile=logfile3,update_sig_freq=0.5,sample=Gibbs_sample,useDPP=T,dynamicPlot= T)
+	mcmc.gibbs4(tree, as.vector(data),alter_ind, D, prior_tbl, ngen= nGibbs_gen,useVCV=F,logfile=logfile3,update_sig_freq=0.5,sample=Gibbs_sample,dynamicPlot= T)
 	cat("\nRun time:", get_time() - t1, sep="\t")
 
 }
@@ -798,7 +819,7 @@ BR= branching.times(tree) # sorted from root to most recent
 dist_from_root = max(BR)-BR
 #phenogram(tree, full_data,add=F, col=rep("black",length(full_data)))
 alter_ind= S[[3]]
-true_sigmas = S[[4]]
+true_sigmas = S[[3]]
 
 ### LOG rel err
 prior_tbl = get_calibration_tbl(D,root_calibration)
@@ -806,13 +827,13 @@ prior_tbl = get_calibration_tbl(D,root_calibration)
 print("Starting MCMC...")
 t1 = get_time()
 logfile3 = sprintf("sim_%s_s2_%s_n_%s_x_%s.log", rep, sig2, ntips, xfold)
-mcmc.gibbs4(tree, data,alter_ind, D, prior_tbl, true_rate=true_sigmas, ngen= nGibbs_gen,bdmcmc_freq=0.5,logfile=logfile3,update_sig_freq=0.5,
-	sample=Gibbs_sample,dynamicPlot=dynamicPlot) 
+mcmc.gibbs4(tree, data, D, prior_tbl, true_rate=true_sigmas, ngen= nGibbs_gen,bdmcmc_freq=0.5,logfile=logfile3,update_sig_freq=0.5,
+	sample=Gibbs_sample,dynamicPlot=dynamicPlot,useTrend=T) 
 cat("\nTime Gibbs:", get_time() - t1, "\n", sep="\t")
 
 logfile2 = sprintf("sim_%s_s2_%s_n_%s_x_%s_const.log", rep, sig2, ntips, xfold)
-mcmc.gibbs4(tree, data,alter_ind, D, prior_tbl, true_rate=true_sigmas, ngen= nGibbs_gen/10,bdmcmc_freq=0  ,logfile=logfile2,update_sig_freq=0.5,
-	sample=Gibbs_sample/10,dynamicPlot=dynamicPlot)
+mcmc.gibbs4(tree, data, D, prior_tbl, true_rate=true_sigmas, ngen= nGibbs_gen/10,bdmcmc_freq=0  ,logfile=logfile2,update_sig_freq=0.5,
+	sample=Gibbs_sample/10,dynamicPlot=dynamicPlot,useTrend=F)
 
 	
 # plot res
@@ -862,74 +883,3 @@ n<-dev.off()
 
 
   
-        
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-## GLOBAL
-# w_dir         = as.character(arg[1])   # working dir
-# sim_n         = as.integer(arg[2])     # simulation number
-# sig2          = as.double(arg[3])      # BM rate
-# ntips         = as.integer(arg[4])     # number of tips
-# ngen          = as.integer(arg[5])     # number of mcmc gen
-# sample        = as.integer(arg[6])     # sampling freq
-# nGibbs_gen    = as.integer(arg[7])     # number of mcmc gen Gibbs
-# Gibbs_sample  = as.integer(arg[8])     # sampling freq Gibbs
-
-#plot_res= F
-#root_calibration =c(0,100)
-
-# start_MCMC_sim(w_dir, sim_n, sig2, ntips,ngen,sample,nGibbs_gen,Gibbs_sample)
-
-#___	start_MCMC("/Users/daniele/Documents/projects/fossilBM/", 1, 0.2, ntips=100,ngenerations=1000000,sampling_f=2000,nGibbs_gen=250000,Gibbs_sample=500)
-#___	"/Users/daniele/Documents/projects/fossilBM/" 1 0.2 100 1000000 2000 250000 100
-#___	
-#___	
-#___	
-#___	
-
-##################################################
-
-#__ setwd(w_dir)
-#__ tree= read.tree(tree_file)
-#__ ntips = length(tree$tip.label)
-#__ raw_data= read.table(data_file,head=T)
-#__ data = raw_data[,2]
-#__ names(data) = raw_data[,1]
-#__ D <- build_table(tree, ntips,data)
-#__ BR= branching.times(tree) # sorted from root to most recent
-#__ dist_from_root = max(BR)-BR
-#__ 
-#__ ### LOG rel err
-#__ # prior_tbl = read.table(prior_file) #get_calibration_tbl(D,root_calibration)
-#__ prior_tbl = get_calibration_tbl(D,root_calibration=c(0,100))	
-#__ hp_gamma_rate    = get_rate_HP((ntips*2-1),target_k,hp_gamma_shape)
-#__ 
-#__ 
-#__ print("Starting MCMC...")
-#__ t1 = get_time()
-#__ 
-#__ stem_name= strsplit(tree_file,".",fixed =T)[[1]][1]
-#__ logfile3 = sprintf("%s_mcmc_%s.log", stem_name, out_file)
-#__ mcmc.gibbs4(tree, data,alter_ind, D, prior_tbl, ngen= nGibbs_gen,gibbs_sampler=T,useVCV=F,logfile=logfile3,update_sig_freq=0.9,sample=Gibbs_sample,useDPP,dynamicPlot)
-#__ cat("\nRun time:", get_time() - t1, sep="\t")
-
-
-
-
-
-
-
-
