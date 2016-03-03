@@ -622,7 +622,7 @@ sim_data_bmt <- function(ntips=20,s2=0.1,m0=0,root_value=0){
 		}else{anc_val = D$val0[node_ind]}
 		
 		br_lengths=c(D$branch.length1,D$branch.length2)
-		desc_val = round(anc_val + rnorm(n=2,mean=br_lengths*m0,sd=br_lengths*s2),3)
+		desc_val = anc_val + rnorm(n=2,mean=br_lengths*m0,sd=br_lengths*s2)
 		desc1_id = D$descendant1[node_ind]
 		desc2_id = D$descendant2[node_ind]
 		
@@ -738,7 +738,7 @@ start_MCMC_sim <- function(w_dir,sim_n,sig2,ntips,ngenerations,sampling_f,nGibbs
 	S = sim_data(ntips=ntips,s2=0.1,xfold=1,n_shifts=0)
 	
 	## SIM WITH TREND
-	S = sim_data_bmt(ntips=ntips,s2=0.1,m0=0,root_value=0)
+	S = sim_data_bmt(ntips=ntips,s2=0.25,m0=0.5,root_value=0)
 	
 	tree= S[[1]]
 	full_data= S[[2]]
