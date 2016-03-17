@@ -51,8 +51,9 @@ dynamicPlot      = T
 w_dir            = "/Users/daniele/Dropbox-personal/Dropbox/fossilizedBM"
 rep              = 1
 sim_n            = 1
-sig2             = 0.1
-n_shifts         = 1
+sig2             = 0.25
+mu0              = 0.5
+n_shifts         = 0
 
 
 
@@ -614,15 +615,17 @@ sim_data_bmt <- function(ntips=20,s2=0.1,m0=0,root_value=0){
 	colnames(D)[8]="val2"
 	
 	tip_data=rep(0,ntips)
+	# constant sig2
+	sigmas2= rep(s2,length(tree$edge.length))
 	
 	for (node_ind in 1:length(D$ancestor)){
 		node =	D$ancestor[node_ind]
-		if (node==1){
+		if (node_ind==1){
 			anc_val = root_value
 		}else{anc_val = D$val0[node_ind]}
 		
-		br_lengths=c(D$branch.length1,D$branch.length2)
-		desc_val = anc_val + rnorm(n=2,mean=br_lengths*m0,sd=br_lengths*s2)
+		br_lengths=c(D$branch.length1[node_ind],D$branch.length2[node_ind])
+		desc_val = anc_val + rnorm(n=2,mean=br_lengths*m0,sd=sqrt(br_lengths*s2))
 		desc1_id = D$descendant1[node_ind]
 		desc2_id = D$descendant2[node_ind]
 		
@@ -641,8 +644,8 @@ sim_data_bmt <- function(ntips=20,s2=0.1,m0=0,root_value=0){
 	all_data = c(tip_data, D$val0)
 	all_names = c(tree$tip.label,D$ancestor)
 	names(all_data) = all_names
-	phenogram(tree, all_data,add=F, col=col, main="Traigram")
-	return(c(tree,all_data,sigmas2,mu0))
+	phenogram(tree, all_data,add=F, col="black", main="Traigram")
+	return(c(tree,all_data,sigmas2,m0))
 }
 
 sim_data <- function(ntips=20,s2=0.1,xfold=16,n_shifts=1){
@@ -738,7 +741,7 @@ start_MCMC_sim <- function(w_dir,sim_n,sig2,ntips,ngenerations,sampling_f,nGibbs
 	S = sim_data(ntips=ntips,s2=0.1,xfold=1,n_shifts=0)
 	
 	## SIM WITH TREND
-	S = sim_data_bmt(ntips=ntips,s2=0.25,m0=0.5,root_value=0)
+	S = sim_data_bmt(ntips=ntips,s2=0.1,m0=0.75,root_value=0)
 	
 	tree= S[[1]]
 	full_data= S[[2]]
@@ -753,11 +756,20 @@ start_MCMC_sim <- function(w_dir,sim_n,sig2,ntips,ngenerations,sampling_f,nGibbs
 	### LOG rel err
 	prior_tbl = get_calibration_tbl(D,root_calibration)
 	
-	logfile3 = sprintf("sim_%s_s2_%s_n_%s.log", sim_n, sig2, ntips)
+	logfile3 = sprintf("sim_%s_s2_%s_n_%sT.log", sim_n, sig2, ntips)
 	mcmc.gibbs4(tree, data, D, prior_tbl, true_rate=true_sigmas, ngen= nGibbs_gen,useVCV=F,
-		logfile=logfile3,update_sig_freq=0.5,sample=Gibbs_sample,dynamicPlot= F,bdmcmc_freq=0,useTrend=T)
+		logfile=logfile3,update_sig_freq=0.5,sample=Gibbs_sample,dynamicPlot= F,bdmcmc_freq=0.5,useTrend=T)
 
 
+	# Test BM simulation
+	#S = sim_data_bmt(ntips=ntips,s2=0.25,m0=0,root_value=0)
+	#tree= S[[1]]
+	#full_data= S[[2]]
+	#data <- S[[2]][names(S[[2]]) %in% tree$tip.label]	
+	##library(geiger)
+	#fitContinuous(tree, data, model = c("BM"))$opt$sigsq
+	    
+		
 	if (plot_res==T){
 		plot_traitgram <-function(logfile,add=F,col="black"){
 			out_tbl = read.table(logfile,header=T)
