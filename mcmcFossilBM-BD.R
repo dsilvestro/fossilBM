@@ -714,7 +714,7 @@ get_time <- function(){
 start_MCMC_sim <- function(w_dir,sim_n,sig2,ntips,ngenerations,sampling_f,nGibbs_gen,Gibbs_sample,root_calibration = c(0,100), plot_res = F){
 	setwd(w_dir)
 	ntips =50
-	S = sim_data(ntips=ntips,s2=0.1,xfold=16)
+	S = sim_data(ntips=ntips,s2=0.25,xfold=16)
 	tree= S[[1]]
 	full_data= S[[2]]
 	data <- S[[2]][names(S[[2]]) %in% tree$tip.label]
@@ -733,7 +733,7 @@ start_MCMC_sim <- function(w_dir,sim_n,sig2,ntips,ngenerations,sampling_f,nGibbs
 
 	t1 = get_time()
 	logfile3 = sprintf("sim_%s_s2_%s_n_%s.log", sim_n, sig2, ntips)
-	mcmc.gibbs4(tree, data,alter_ind, D, prior_tbl, true_anc=true_sigmas, ngen= nGibbs_gen,gibbs_sampler=T,useVCV=F,
+	mcmc.gibbs4(tree, data,alter_ind, D, prior_tbl, true_rate=true_sigmas, ngen= nGibbs_gen,gibbs_sampler=T,useVCV=F,
 		logfile=logfile3,update_sig_freq=0.5,sample=Gibbs_sample,useDPP=F,dynamicPlot= T,useFixPart=F)
 	cat("\nTime Gibbs:", get_time() - t1, sep="\t")
 
