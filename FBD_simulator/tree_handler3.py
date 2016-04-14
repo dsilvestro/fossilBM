@@ -116,8 +116,7 @@ def add_fossil(node,tip):
 
 
 def exclude_root(node):
-	if node.parent_node is None:
-		return False
+	if node.parent_node is None: return False
 	else: return True
 
 def remove_fossil(node):
@@ -153,6 +152,34 @@ def alter_node_age(node,alter=0,int_node=False):
 		inc_edges[2].length -= alter		
 	#print alter, -BRs[2],minBR
 
+
+def move_fossil_tip_RJ(tip,set_mrca=False):
+	# MRCA= tree.find_node_with_taxon_label("t2")
+	# get distance from root of stem of fossil 
+	br_length = tip.edge_length
+	tip_age =tip.distance_from_root()
+	root_dist_fossil_stem  = tip.distance_from_root()-br_length
+	#print "NODE1:",tip._get_parent_node()
+	# get root dist fossil tip
+	fossil_tip_dist_root = tip.distance_from_root()
+	remove_fossil(tip)
+	# get mrca
+	MRCA = set_mrca		
+	root_dist_mrca= MRCA.distance_from_root()
+	stem_mrca= MRCA._get_parent_node()
+	root_dist_stem_mrca = stem_mrca.distance_from_root()
+	len_stem_mrca= stem_mrca.edge_length
+	#tip.edge_length=0.0000000001
+	add_fossil(MRCA, tip)
+	anc=tip._get_parent_node()
+	root_dist_temp_node=anc.distance_from_root()
+	#print dist_from_new_stem, root_dist_mrca-tip_age, root_dist_mrca,root_dist_stem_mrca
+	alter= root_dist_temp_node-root_dist_fossil_stem  #+(10-root_dist_mrca)
+	alter_node_age(tip, alter)
+
+
+
+
 def move_fossil_tip(tip,ind=0):
 	# MRCA= tree.find_node_with_taxon_label("t2")
 	# get distance from root of stem of fossil 
@@ -175,7 +202,7 @@ def move_fossil_tip(tip,ind=0):
 		#print n, t1,t2
 		if t1<root_dist_fossil_stem and t2>root_dist_fossil_stem:
 			candidate_nodes.append(node)
-	
+
 	# random candidate node
 	ind= np.random.randint(0,len(candidate_nodes))
 	#print "NODE2:",candidate_nodes[ind], ind
@@ -185,18 +212,15 @@ def move_fossil_tip(tip,ind=0):
 	root_dist_stem_mrca = stem_mrca.distance_from_root()
 	len_stem_mrca= stem_mrca.edge_length
 	add_fossil(MRCA, tip)
-	
 	anc=tip._get_parent_node()
 	root_dist_temp_node=anc.distance_from_root()
-	
-	
 	#print dist_from_new_stem, root_dist_mrca-tip_age, root_dist_mrca,root_dist_stem_mrca
 	alter= root_dist_temp_node-root_dist_fossil_stem  #+(10-root_dist_mrca)
 	alter_node_age(tip, alter)
 	tip.edge_length = br_length
 	#print "ages", tip_age, tip.distance_from_root(), "alter:",alter
 	#return len(candidate_nodes) # number of possible attachmnents (gamma in FBD likelihood)
-
+		
 
 
 def mod_calc_node_ages(tree, ultrametricity_precision=False, internal_only=False):
@@ -278,8 +302,9 @@ def mod_calc_node_ages_(tree,root_age=tree_root_age,rec_node_ages=[]):
 	return ages,np.array(ind_x_z),fossil_node_list
 
 
-def calc_gamma(tip):
-	br_length = tip.edge_length
+def calc_gamma(tip, set_br_length=False):
+	if set_br_length is False: br_length = tip.edge_length
+	else: br_length=set_br_length
 	tip_age =tip.distance_from_root()
 	root_dist_fossil_stem  = tip.distance_from_root()-br_length
 	# get root dist fossil tip
@@ -298,13 +323,19 @@ def calc_gamma(tip):
 			candidate_nodes.append(node)
 			#print "*",diff 
 		else: pass #print "",diff
-	return len(candidate_nodes)
+	
+	if set_br_length is False:
+		return len(candidate_nodes)
+	else: # use in the delete move (RJMCMC)
+		return candidate_nodes
 
 
 
 ####### START MCMC	
 for it in range(n_iterations):
-	hasting=0
+	hasting  = 0
+	jacobian = 0
+	
 	if it==0:
 		### MAKE a few TIPS BECOME FOSSIL
 		#fossil_labels = ["t1","t2","t4","t9"] #["t2"] #
@@ -317,9 +348,11 @@ for it in range(n_iterations):
 			parent = fossil_tip._get_parent_node()
 			parent.label="fossil"
 			print f, fossil_tip
+		
 		if print_trees is True:
 			print "Original tree:"
 			tree.print_plot(plot_metric='length',show_internal_node_labels=1)
+		
 		# get node ages and identifiers for fossil nodes vs extant nodes
 		n_ages, index_node,fossil_int_nodes = mod_calc_node_ages_(tree)
 		reconstructed_node_ages = n_ages[index_node==0]# these node ages won't be touched
@@ -335,12 +368,17 @@ for it in range(n_iterations):
 		for i, f in enumerate(fossil_labels):
 			tip=tree.find_node_with_taxon_label(f)
 			tip_ages[i]=tree_root_age-tip.distance_from_root()
+		
 		par=[0.2,0.1,0.1]
 		parA=par
+		# indicators ancestral fossils = 0, fossil tips = 1
+		Ind = np.ones(len(fossil_labels))
 		
-	rr=np.random.random()
+		
+	rr=np.random.random(3)
 	#if it<3: print it, rr, fossil_int_nodes
-	if rr<.4:
+	# MOVE FOSSILS (ADD CONSTRAINTS!)
+	if rr[0]<.4:
 		# update attachment time
 		r_fossil = np.random.randint(0,len(fossil_labels))
 		#print "Before tree (%s):" % (fossil_labels[r_fossil])
@@ -350,23 +388,55 @@ for it in range(n_iterations):
 		alter_node_age(tip_mod)
 		move_fossil_tip(tip_mod,3)
 		#print gamma_f
-	elif rr<0.8:
+	# UPDATE FOSSIL ATTACHMENT AGE (ADD CHECK FOR 0 BR LENGTH)
+	elif rr[0]<0.8:
+		# only update branches with non-zero br lengths
+		# in theory internal nodes should all have >0 br length, because 
+		# only fossil-tips can be assigned to a branch (hence having a 0 br length) 
 		r_fossil_node = np.random.randint(0,len(fossil_int_nodes))
 		alter_node_age(fossil_int_nodes[r_fossil_node],int_node=True)
-	elif rr<0.95 and runRJMCMC is True:
+	elif rr[0]<0.95 and runRJMCMC is True:
 		# m_fossils: number of fossils
 		# k_fossils: number of fossils that are ancestral
+		index_k_fossils = (Ind==0).nonzero()[0]
+		k_fossils = len(index_k_fossils)
 		# ADD BRANCH with PROB g
 		if k_fossils < m_fossils: g = 0.5 
 		if m_fossils==k_fossils:  g = 1   # all are ancestral
 		elif k_fossils==0:        g = 0   # none ancestral
-		if g>np.random.random():
-			index_k_fossils = (Ind==0).nonzero()[0]
+		if g>rr[1]:
 			r_index = np.random.choice(index_k_fossils)
-			r_fossil_taxon = tip_mod=tree.find_node_with_taxon_label(fossil_labels[r_index])
+			r_fossil_taxon = tree.find_node_with_taxon_label(fossil_labels[r_index])
 			y_f = tip_ages[r_index] # age of the fossil
-			x_i = ... # age of the ancestor of the fossil
-		
+			anc_fossil_1 = r_fossil_taxon.parent_node # ancestor of the zero br length node
+			# x_i = anc_fossil_1.parent_node # ancestor of the fossil
+			u = rr[2]
+			x_i_y_f = 0+anc_fossil_1.edge_length
+			new_br_length = x_i_y_f*u # sample random br length
+			alter_node_age(anc_fossil_1,alter=new_br_length,int_node=True)
+			new_Ind = np.zeros(len(fossil_labels))+Ind
+			new_Ind[r_index] = 1 # anc fossil is now a tip fossil
+			new_index_k_fossils = (Ind==0).nonzero()[0]
+			new_k_fossils = len(new_index_k_fossils)
+			# hasting ratio
+			if m_fossils==k_fossils and new_k_fossils>0: hasting = 0.5
+			elif new_k_fossils==2:                       hasting = 2.0
+			else:                                        hasting = 1.0
+			# Jacobian
+			jacobian = x_i_y_f
+		# DELETE BRANCH (set br length to 0)
+		else:
+			tree.print_plot(plot_metric='length',show_internal_node_labels=1)
+			index_tip_fossils = (Ind==1).nonzero()[0]
+			r_index = 1 # np.random.choice(index_tip_fossils)
+			r_fossil_taxon = tree.find_node_with_taxon_label(fossil_labels[r_index])
+			# get possible attachment
+			cand_lineages = calc_gamma(r_fossil_taxon, set_br_length=0)
+			r_lineage = cand_lineages[1] # cand_lineages[np.random.randint(0,len(cand_lineages))]
+			
+			alter_node_age(r_fossil_taxon)
+			move_fossil_tip_RJ(r_fossil_taxon,set_mrca=r_lineage)
+			
 	else:
 		par, hasting = update_multiplier_proposal(parA,1.1)
 	
@@ -393,10 +463,7 @@ for it in range(n_iterations):
 	for i, f in enumerate(fossil_labels):
 		tip=tree.find_node_with_taxon_label(f)
 		gamma_f[i] = calc_gamma(tip)
-	
-	# indicators ancestral fossils = 0, fossil tips = 1
-	Ind = np.ones(len(fossil_labels))
-	
+		
 	prior = sum(prior_gamma(par))
 	lik= calc_FBD_lik(x=node_ages,z=fossil_sp_time,y=tip_ages,g=gamma_f,I=Ind,rates=par)
 	
