@@ -7,6 +7,6 @@ write.tree(tree, file="newick2.tre")
 
 
 library(TreeSim)
-t =sim.bd.taxa(n=20, 1, lambda=0.1, mu=0.025, frac = 1, complete = TRUE, stochsampling = FALSE)
-plot(t[[1]])
-write.tree(t[[1]], file="newick3.tre")
+t =sim.bd.taxa(n=40, 1, lambda=0.2, mu=0.1, frac = 1, complete = TRUE, stochsampling = FALSE)
+plot(ladderize(t[[1]]))
+write.tree(t[[1]], file="newick40_0201.tre", tree.names="[&R] ")

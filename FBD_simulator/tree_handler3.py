@@ -9,21 +9,28 @@ np.set_printoptions(precision=5)   # rounds all array elements to 3rd digit
 
 ## GLOBAL STUFF
 rho = 1.0 # sampling
-n_iterations = 500000
-print_freq = 1000
-sample_freq = 1000
+n_iterations = 5000
+print_freq = 100
+sample_freq = 10
 print_trees = False
 runRJMCMC = True
-tree_file = "/Users/daniele/Dropbox-personal/Dropbox/fossilizedBM/fossilBM/FBD_simulator/newick3.tre"
+stem_in = "newick40_0201"
+tree_file = "/Users/daniele/Dropbox-personal/Dropbox/fossilizedBM/fossilBM/FBD_simulator/%s.tre" % (stem_in)
+stem_output="FBD%s" % (stem_in)
 
-out_file_name="FBD.log" # % (dataset,args.j,model_name,clade_name,beta_value)
+
+D1 = 0.01
+D2 = 1.2
+
+
+out_file_name="%s.log" % (stem_output)
 logfile = open(out_file_name , "wb") 
 wlog=csv.writer(logfile, delimiter='\t')
 head="it\tposterior\tlikelihood\tprior\tL\tM\tQ\tI\ttl\tuTree\trjTree\tuRate"
 wlog.writerow(head.split('\t'))
 logfile.flush()
 
-out_treefile_name="FBD.tre"
+out_treefile_name="%s.tre" % (stem_output)
 treefile= open(out_treefile_name , "wb")
  
 ###### PRIORS
@@ -66,8 +73,7 @@ def calc_FBD_lik(x,z,y,g,I,rates=[0.5,0.2,0.1]):
 	lam = rates[0] # spec rate
 	mu  = rates[1] # ex rate
 	psi = rates[2] # preservation
-
-
+	
 	c1= np.abs( np.sqrt( (lam-mu-psi)**2 + 4*lam*psi) )
 	c2 = -(lam-mu-2*lam*rho-psi)/c1
 	
@@ -76,21 +82,22 @@ def calc_FBD_lik(x,z,y,g,I,rates=[0.5,0.2,0.1]):
 	
 	def p0(t):
 		return 1 + ( -(lam-mu-psi) + c1 * (exp(-c1*t)*(1-c2)-(1+c2))/(exp(-c1*t)*(1-c2)+(1+c2)) ) / 2*lam
-
+	
 	def p0hat(t):
 		return 1 - (rho*(lam-mu)) / ( lam*rho + (lam*(1-rho)-mu) * exp(-(lam-mu)*t) ) 
-
+	
 	#lik1 = 1./( lam*(1-p0hat(x1)) )**2
 	#lik2 = 4*lam*rho / q(x1)
 	#lik3 = np.prod( 4*lam*rho/q(x) )
 	#lik4 = np.prod( psi*g * ( 2*lam*p0(y)*q(y)/q(z) )**I )
-
+	
 	log_lik1 = -(log(lam)+log(1-p0hat(x1)) )*2
 	log_lik2 = log(4*lam*rho) - log(q(x1))
 	log_lik3 = np.sum( log(4*lam*rho)-log(q(x)) )
+	#print len(y),len(z),len(I)
 	log_lik4 = np.sum( log(psi*g) + ( log(2*lam) + log(p0(y))+ log(q(y))-log(q(z)) )*I )
 	#print sum(log(lik1)+log(lik2)+log(lik3)+log(lik4))- (log_lik1+log_lik2+log_lik3+log_lik4)
-
+	
 	return (log_lik1+log_lik2+log_lik3+log_lik4)
 
 ###################  END LIKELIHOOD FUNCTIONS  ###################
@@ -129,7 +136,7 @@ def remove_fossil(node):
 	parent = node._get_parent_node()
 	parent.remove_child(node, suppress_unifurcations=True)
 
-def alter_node_age(node,alter=0,int_node=False):
+def alter_node_age(node,alter=0,int_node=False, D1=0.2):
 	if int_node is False: # node.is_leaf():
 		anc_fossil = node._get_parent_node()
 	else: anc_fossil=node
@@ -147,7 +154,7 @@ def alter_node_age(node,alter=0,int_node=False):
 	# min total br length (fossil tip and stem of it ancestor)
 	minBR = min(BRs[0],BRs[1])
 	if alter==0: 
-		alter = round(np.random.uniform(-BRs[2],minBR),3)
+		alter = D1*round(np.random.uniform(-BRs[2],minBR),3)
 		# alter 2 desc and stem
 		inc_edges[0].length -= alter
 		inc_edges[1].length -= alter
@@ -288,7 +295,7 @@ def mod_calc_node_ages_(tree,root_age=tree_root_age,rec_node_ages=[]):
 		if node.is_leaf() is False:
 			age = root_age-node.root_distance
 			if len(rec_node_ages)>0: 
-				if min(abs(rec_node_ages-age))<0.00001: 
+				if min(abs(rec_node_ages-age))<0.00000001: 
 					#node.label=""
 					ind_x_z.append(0)
 				else:
@@ -296,7 +303,7 @@ def mod_calc_node_ages_(tree,root_age=tree_root_age,rec_node_ages=[]):
 					ind_x_z.append(1)
 					fossil_node_list.append(node)
 			else:
-				if node.label=="fossil": 
+				if node.label=="fossil" or node.label=="half_fossil": 
 					is_fossil=1
 					fossil_node_list.append(node)
 				ind_x_z.append(is_fossil)
@@ -306,7 +313,52 @@ def mod_calc_node_ages_(tree,root_age=tree_root_age,rec_node_ages=[]):
 	ages=np.array(dists)
 	#tree.print_plot(plot_metric='length',show_internal_node_labels=1) 
 	#print "indexes", ind_x_z
+	#print fossil_node_list
 	return ages,np.array(ind_x_z),fossil_node_list
+
+def mod_calc_node_ages_child(tree,root_age=tree_root_age):
+	"""
+	Adds attribute "root_distance" to each node, with value set to the
+	sum of edge lengths from the node to the root. Returns list of
+	distances. If ``return_leaf_distances_only`` is True, then only
+	leaf distances will be true.
+	"""
+	dists = []
+	ind_x_z = []
+	fossil_node_list=[]
+	for node in tree.postorder_node_iter():
+		is_fossil=0
+		if node.is_leaf() is False:
+			if node.label=="fossil": 
+				is_fossil=1
+				fossil_node_list.append(node)
+			C = node.child_nodes()
+			C_labels=["",""]
+			if C[0].is_leaf() is True: C_labels[0]=C[0].taxon._label
+			else: C_labels[0]=C[0].label
+			if C[1].is_leaf() is True: C_labels[1]=C[1].taxon._label
+			else: C_labels[1]=C[1].label
+			all_foss_labels = list(fossil_labels) + ["fossil"]
+			if C_labels[0] in all_foss_labels and C_labels[1] in all_foss_labels:
+				print C_labels
+				is_fossil=1
+				fossil_node_list.append(node)				
+				node.label="fossil"
+			elif C_labels[0] in all_foss_labels or C_labels[1] in all_foss_labels:
+				print C_labels
+				is_fossil=1
+				fossil_node_list.append(node)				
+				node.label="half_fossil"
+			ind_x_z.append(is_fossil)
+			
+	ages=np.array(dists)
+	#tree.print_plot(plot_metric='length',show_internal_node_labels=1) 
+	#print "indexes", ind_x_z
+	print fossil_node_list
+	#return ages,np.array(ind_x_z),fossil_node_list
+
+
+
 
 
 def calc_gamma(tip, set_br_length=False):
@@ -320,16 +372,17 @@ def calc_gamma(tip, set_br_length=False):
 	nd= tree.postorder_node_iter(filter_fn=exclude_root) #  
 	candidate_nodes=[]
 	for n, node in enumerate(nd): 
-		# get parent
-		anc_fossil = node.parent_node
-		t1 = anc_fossil.distance_from_root()
-		t2 = node.distance_from_root()
-		#print n, t1,t2,
-		diff = np.array([(t1-root_dist_fossil_stem), t2-fossil_tip_dist_root]) # a fossil cannot be assigned to itself
-		if t1<root_dist_fossil_stem and t2>root_dist_fossil_stem and max(abs(diff))>0.00001:
-			candidate_nodes.append(node)
-			#print "*",diff 
-		else: pass #print "",diff
+		if node.edge_length >0.000001:
+			# get parent
+			anc_fossil = node.parent_node
+			t1 = anc_fossil.distance_from_root()
+			t2 = node.distance_from_root()
+			#print n, t1,t2,
+			diff = np.array([(t1-root_dist_fossil_stem), t2-fossil_tip_dist_root]) # a fossil cannot be assigned to itself
+			if t1<root_dist_fossil_stem and t2>root_dist_fossil_stem and max(abs(diff))>0.00001:
+				candidate_nodes.append(node)
+				#print "*",diff 
+			else: pass #print "",diff
 	
 	if set_br_length is False:
 		return len(candidate_nodes)
@@ -340,7 +393,9 @@ def calc_gamma(tip, set_br_length=False):
 
 ####### START MCMC	
 tree_mod_accepted = np.zeros(3)
-thresholds = [.2,.4,.6] #[0,0,0] #
+thresholds = [.10,.20,.80] #[0,0,0] #
+update_freq = np.diff(np.array([0]+thresholds+[1]))
+update_freq = np.array([update_freq[0]*2]+ list(update_freq[2:]))
 rr=np.zeros(3)
 
 for it in range(n_iterations):
@@ -353,6 +408,7 @@ for it in range(n_iterations):
 		fossil_tip_list = list()
 		for f in fossil_labels: 
 			fossil_tip=tree.find_node_with_taxon_label(f)
+			fossil_tip.label ="fossil"
 			fossil_edge = fossil_tip.edge
 		#	fossil_edge.length = fossil_edge.length*0.15
 			fossil_tip_list.append(fossil_tip)
@@ -365,7 +421,13 @@ for it in range(n_iterations):
 			tree.print_plot(plot_metric='length',show_internal_node_labels=1)
 		
 		# get node ages and identifiers for fossil nodes vs extant nodes
+		mod_calc_node_ages_child(tree)
+		if print_trees is True:
+			print "Annotated tree:"
+			tree.print_plot(plot_metric='length',show_internal_node_labels=1)
+				
 		n_ages, index_node,fossil_int_nodes = mod_calc_node_ages_(tree)
+		print len(index_node[index_node==0]),len(index_node[index_node==1])
 		reconstructed_node_ages = n_ages[index_node==0]# these node ages won't be touched
 		# checks
 		# nd= tree.postorder_node_iter(filter_fn=exclude_root) #  
@@ -380,27 +442,35 @@ for it in range(n_iterations):
 			tip=tree.find_node_with_taxon_label(f)
 			tip_ages[i]=tree_root_age-tip.distance_from_root()
 		
-		par=[0.2,0.1,0.1]
+		par=np.array([0.2,0.1,0.1])
 		parA=par
 		# indicators ancestral fossils = 0, fossil tips = 1
 		Ind = np.ones(len(fossil_labels))
 		treeA = tree.clone(depth=1) # treeA is the accepted tree
-		
-	if rr[0]<thresholds[2] or it==0:  # clone only if tree was accepted on previous step
-		tree=treeA.clone(depth=1) # always start from accepted tree
+	else:
+		par=parA+0
+		Ind=IndA+0
+		gamma_f=gamma_fA+0
+		node_ages, fossil_sp_time, tip_ages= node_agesA+0, fossil_sp_timeA+0, tip_agesA+0		
+	
+	#if rr[0]<thresholds[2] or it==0:  # clone only if tree was accepted on previous step
+	tree=treeA.clone(depth=1) # always start from accepted tree
 	
 	rr=np.random.random(3)
+	#_debug_ if it>=300: rr=np.ones(3)+1
 	#if it<3: print it, rr, fossil_int_nodes
 	# MOVE FOSSILS (ADD CONSTRAINTS!)
 	if rr[0]<thresholds[0]:
+		#tree.print_plot(plot_metric='length',show_internal_node_labels=1)
 		# update attachment time
 		r_fossil = np.random.randint(0,len(fossil_labels))
 		#print "Before tree (%s):" % (fossil_labels[r_fossil])
 		#tip_mod=fossil_tip_list[r_fossil]
 		tip_mod=tree.find_node_with_taxon_label(fossil_labels[r_fossil])
 		# update attachment placement
-		alter_node_age(tip_mod)
+		alter_node_age(tip_mod,D1=0)
 		move_fossil_tip(tip_mod,3)
+		#tree.print_plot(plot_metric='length',show_internal_node_labels=1)
 		#print gamma_f
 	# UPDATE FOSSIL ATTACHMENT AGE (ADD CHECK FOR 0 BR LENGTH)
 	elif rr[0]<thresholds[1]:
@@ -464,13 +534,10 @@ for it in range(n_iterations):
 			anc1 =r_fossil_taxon.parent_node
 			x_i_y_f = anc1.edge_length
 			jacobian = log(1./x_i_y_f)
-	else:
-		par, hasting = update_multiplier_proposal(parA,1.1)
+	elif rr[0]<1:
+		par, hasting = update_multiplier_proposal(parA,D2)
 	
 		
-	
-	
-	
 	# get vector of speciation times
 	# rename node
 	#tree.print_plot(plot_metric='length',show_internal_node_labels=1) #
@@ -489,36 +556,63 @@ for it in range(n_iterations):
 		for i, f in enumerate(fossil_labels):
 			tip=tree.find_node_with_taxon_label(f)
 			gamma_f[i] = calc_gamma(tip)
+
+	#_debug_ if it==300:
+	#_debug_ 	print parA, gamma_fA, node_ages, fossil_sp_time, "\n",treeA.length(), tree.length()
+	#_debug_ if it==301:
+	#_debug_ 	print "\n\n\n",parA, gamma_fA,"\n", node_agesA, fossil_sp_timeA
+	#_debug_ 	print par , gamma_f ,"\n", node_ages, fossil_sp_time, "\n",treeA.length(), tree.length()
+	#_debug_ 	print IndA, Ind
+	#_debug_ 	print "old lik", calc_FBD_lik(x=node_agesA,z=fossil_sp_timeA,y=tip_agesA,g=gamma_fA,I=IndA,rates=parA)
+	#_debug_ 	print "new lik", calc_FBD_lik(x=node_ages,z=fossil_sp_time,y=tip_ages,g=gamma_f,I=Ind,rates=par)
+	
 		
 	prior = sum(prior_gamma(par))
+	#print "z=", len(fossil_sp_time), "y=", len(tip_ages)
+	
 	lik= calc_FBD_lik(x=node_ages,z=fossil_sp_time,y=tip_ages,g=gamma_f,I=Ind,rates=par)
+	
+	#_debug_ if it==301:
+	#_debug_ 	print it, likA, parA, lik, par, hasting, jacobian
+	#_debug_ 	quit()
 	
 	if it==0: 
 		likA=lik
 		priorA=prior
 		postA=likA+priorA
 		IndA=Ind
+		gamma_fA=gamma_f
 	
-	if (lik + prior) - postA + hasting >= log(np.random.random()):
+	#print treeA.length(),tree.length()
+	#_debug_ if it>0: print likA, calc_FBD_lik(x=node_agesA,z=fossil_sp_timeA,y=tip_agesA,g=gamma_fA,I=IndA,rates=parA), lik
+	
+	
+	if (lik + prior) - postA + hasting + jacobian >= log(np.random.random()):
 		postA=lik+prior
 		likA=lik
 		priorA=prior
 		parA=par
 		IndA=Ind
+		gamma_fA=gamma_f
+		node_agesA, fossil_sp_timeA, tip_agesA= node_ages, fossil_sp_time, tip_ages
 		# clone only if tree was accepted on previous step
-		if rr[0]<thresholds[2]: treeA=tree.clone(depth=1)
+		#if rr[0]<thresholds[2]: 
+		treeA=tree.clone(depth=1)
 			
 		if   rr[0]<thresholds[1]: tree_mod_accepted[0] += 1.
 		elif rr[0]<thresholds[2]: tree_mod_accepted[1] += 1.
 		elif rr[0]>thresholds[2]: tree_mod_accepted[2] += 1.
+		#print "accepted", treeA.length(),tree.length()
+	#else: 
+	#	print "rejected", treeA.length(),tree.length(),
 	
 
 	if it % print_freq==0:
-		print it, likA, parA, lik, par
+		print it, likA, parA, lik, par, hasting, jacobian
 		if print_trees is True: treeA.print_plot(plot_metric='length',show_internal_node_labels=1) #
 	
 	if it % sample_freq==0:
-		log_state=[it,postA,likA,priorA]+list(parA)+[np.mean(IndA),tree.length()]+list(tree_mod_accepted/((it+1.)*np.array([.4,.2,.4])))
+		log_state=[it,postA,likA,priorA]+list(parA)+[np.mean(IndA),treeA.length()]+list(tree_mod_accepted/((it+1.)*update_freq))
 		wlog.writerow(log_state)
 		logfile.flush()
 		treefile.writelines(treeA.as_string(schema="newick"))
