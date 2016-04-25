@@ -9,8 +9,8 @@ np.set_printoptions(precision=5)   # rounds all array elements to 3rd digit
 
 ## GLOBAL STUFF
 rho = 1.0 # sampling
-n_iterations = 5000
-print_freq = 100
+n_iterations = 25000
+print_freq = 10
 sample_freq = 10
 print_trees = False
 runRJMCMC = True
@@ -59,7 +59,7 @@ taxa_labels = np.array(taxa_labels)
 tree_root_age = max(tip_dist_from_root)
 fossil_labels=taxa_labels[tip_dist_from_root<(tree_root_age-0.00001)]
 m_fossils = len(fossil_labels)  
-print m_fossils, "fossils:",fossil_labels
+#print m_fossils, "fossils:",fossil_labels
 
 
 ################### START LIKELIHOOD FUNCTIONS ###################
@@ -96,7 +96,7 @@ def calc_FBD_lik(x,z,y,g,I,rates=[0.5,0.2,0.1]):
 	log_lik3 = np.sum( log(4*lam*rho)-log(q(x)) )
 	#print len(y),len(z),len(I)
 	log_lik4 = np.sum( log(psi*g) + ( log(2*lam) + log(p0(y))+ log(q(y))-log(q(z)) )*I )
-	#print sum(log(lik1)+log(lik2)+log(lik3)+log(lik4))- (log_lik1+log_lik2+log_lik3+log_lik4)
+	#sum(log(lik1)+log(lik2)+log(lik3)+log(lik4))- (log_lik1+log_lik2+log_lik3+log_lik4)
 	
 	return (log_lik1+log_lik2+log_lik3+log_lik4)
 
@@ -354,7 +354,7 @@ def mod_calc_node_ages_child(tree,root_age=tree_root_age):
 	ages=np.array(dists)
 	#tree.print_plot(plot_metric='length',show_internal_node_labels=1) 
 	#print "indexes", ind_x_z
-	print fossil_node_list
+	#print fossil_node_list
 	#return ages,np.array(ind_x_z),fossil_node_list
 
 
@@ -379,11 +379,11 @@ def calc_gamma(tip, set_br_length=False):
 			t2 = node.distance_from_root()
 			#print n, t1,t2,
 			diff = np.array([(t1-root_dist_fossil_stem), t2-fossil_tip_dist_root]) # a fossil cannot be assigned to itself
-			if t1<root_dist_fossil_stem and t2>root_dist_fossil_stem and max(abs(diff))>0.00001:
+			if t1<=root_dist_fossil_stem and t2>root_dist_fossil_stem and max(abs(diff))>0.00001:
 				candidate_nodes.append(node)
 				#print "*",diff 
 			else: pass #print "",diff
-	
+	#print tip.taxon._label, len(candidate_nodes)
 	if set_br_length is False:
 		return len(candidate_nodes)
 	else: # use in the delete move (RJMCMC)
@@ -414,7 +414,7 @@ for it in range(n_iterations):
 			fossil_tip_list.append(fossil_tip)
 			parent = fossil_tip._get_parent_node()
 			parent.label="fossil"
-			print f, fossil_tip
+			#print f, fossil_tip
 		
 		if print_trees is True:
 			print "Original tree:"
@@ -427,7 +427,7 @@ for it in range(n_iterations):
 			tree.print_plot(plot_metric='length',show_internal_node_labels=1)
 				
 		n_ages, index_node,fossil_int_nodes = mod_calc_node_ages_(tree)
-		print len(index_node[index_node==0]),len(index_node[index_node==1])
+		#print len(index_node[index_node==0]),len(index_node[index_node==1])
 		reconstructed_node_ages = n_ages[index_node==0]# these node ages won't be touched
 		# checks
 		# nd= tree.postorder_node_iter(filter_fn=exclude_root) #  
@@ -457,6 +457,7 @@ for it in range(n_iterations):
 	tree=treeA.clone(depth=1) # always start from accepted tree
 	
 	rr=np.random.random(3)
+	if it==0: rr= np.zeros(3)+3
 	#_debug_ if it>=300: rr=np.ones(3)+1
 	#if it<3: print it, rr, fossil_int_nodes
 	# MOVE FOSSILS (ADD CONSTRAINTS!)
