@@ -14,8 +14,9 @@ print_freq = 10
 sample_freq = 10
 print_trees = False
 runRJMCMC = True
-stem_in = "newick40_0201"
-tree_file = "/Users/daniele/Dropbox-personal/Dropbox/fossilizedBM/fossilBM/FBD_simulator/%s.tre" % (stem_in)
+stem_in = "4_output" # 
+#stem_in = "newick40_0201" #
+tree_file = "/Users/daniele/Dropbox-personal/Dropbox/fossilizedBM/code_FBD/fossilBM/FBD_simulator/%s.tre" % (stem_in)
 stem_output="FBD%s" % (stem_in)
 
 
@@ -116,11 +117,16 @@ def update_multiplier_proposal(i,d):
 def add_fossil(node,tip):
 	if node.is_leaf():
 		#node= tree.find_node_with_taxon_label("t2")
-		node1=node.clone(depth=2)
-		node1.edge_length=tip.edge_length
-		node.add_child(tip)
-		node.add_child(node1)
-		node.edge_length-=tip.edge_length
+		try:
+			node1=node.clone(depth=2)
+			node1.edge_length=tip.edge_length
+			node.add_child(tip)
+			node.add_child(node1)
+			node.edge_length-=tip.edge_length
+		except:
+			print "ERROR:",node,tip
+			tree.print_plot(plot_metric='length',show_internal_node_labels=1) 
+			sys.exit()
 	else:
 		##tip = tree.find_node_with_taxon_label(tip_label)
 		node.insert_child(index = 2,node =tip) # using index=2 new node goes along the stem of MRCA
@@ -377,12 +383,18 @@ def calc_gamma(tip, set_br_length=False):
 			anc_fossil = node.parent_node
 			t1 = anc_fossil.distance_from_root()
 			t2 = node.distance_from_root()
-			#print n, t1,t2,
 			diff = np.array([(t1-root_dist_fossil_stem), t2-fossil_tip_dist_root]) # a fossil cannot be assigned to itself
-			if t1<=root_dist_fossil_stem and t2>root_dist_fossil_stem and max(abs(diff))>0.00001:
-				candidate_nodes.append(node)
-				#print "*",diff 
-			else: pass #print "",diff
+			#print n, t1,t2,root_dist_fossil_stem,fossil_tip_dist_root, diff, anc_fossil, tip
+			
+			try: node_taxon_name = node.taxon._label
+			except: node_taxon_name = "ahah"
+			
+			if node_taxon_name != tip.taxon._label:
+				if t1<=root_dist_fossil_stem and t2>root_dist_fossil_stem and max(abs(diff))>0.00001:
+					candidate_nodes.append(node)
+					#try: print "*",node.taxon._label, tip.taxon._label, node, tip
+					#except: pass
+				else: pass #print "",diff
 	#print tip.taxon._label, len(candidate_nodes)
 	if set_br_length is False:
 		return len(candidate_nodes)
@@ -521,7 +533,9 @@ for it in range(n_iterations):
 			# get possible attachment
 			cand_lineages = calc_gamma(r_fossil_taxon, set_br_length=0)
 			r_lineage = cand_lineages[np.random.randint(0,len(cand_lineages))]
-			move_fossil_tip_RJ(r_fossil_taxon,set_mrca=r_lineage)
+			try: move_fossil_tip_RJ(r_fossil_taxon,set_mrca=r_lineage)
+			except: 
+				print "AHASHAHAH",r_fossil_taxon,r_lineage
 			# update indexes
 			Ind[r_index]=0
 			new_index_k_fossils = (Ind==0).nonzero()[0]
@@ -570,6 +584,7 @@ for it in range(n_iterations):
 		
 	prior = sum(prior_gamma(par))
 	#print "z=", len(fossil_sp_time), "y=", len(tip_ages)
+	#tree.print_plot(plot_metric='length',show_internal_node_labels=1) #
 	
 	lik= calc_FBD_lik(x=node_ages,z=fossil_sp_time,y=tip_ages,g=gamma_f,I=Ind,rates=par)
 	
