@@ -474,7 +474,7 @@ run_BDMCMC <- function(tree, trait_states, sig2, ind_sig, mu0, ind_mu0,D,IND_edg
 mcmc.gibbs4 <- function (tree, x, D, prior_tbl,true_rate,ngen = 100000, control = list(),useVCV=F, sample=100,logfile="log",update_sig_freq=0.5,dynamicPlot = F,useFixPart=F,bdmcmc_freq=0.75,useTrend=F){
 	x=data
 	TE=as.matrix(tree$edge)
-	cat(c("it", "posterior","likelihood","prior", "sig2", "mu0", "MAPE","sdAPE","K", paste("sig2", 1:length(TE[,1]),sep="_"), paste("anc",D[,1],sep="_"),"\n"),sep="\t", file=logfile, append=F)
+	cat(c("it", "posterior","likelihood","prior", "sig2", "mu0", "MAPE","sdAPE","K_sig2","K_mu0", paste("sig2", 1:length(TE[,1]),sep="_"),paste("mu0", 1:length(TE[,1]),sep="_"), paste("anc",D[,1],sep="_"),"\n"),sep="\t", file=logfile, append=F)
 	a <- 0
 	y <- rep(0, tree$Nnode - 1)
 	sig2 <- c(0.2)  
@@ -597,7 +597,7 @@ mcmc.gibbs4 <- function (tree, x, D, prior_tbl,true_rate,ngen = 100000, control 
 				ind_sig2      = bdmcmc_list[[2]]					
 				mu0.prime     = bdmcmc_list[[3]]
 				ind_mu0       = bdmcmc_list[[4]]										
-				print (ind_mu0)
+				#print (ind_mu0)
 				gibbs=1
 			}
 			
@@ -623,11 +623,12 @@ mcmc.gibbs4 <- function (tree, x, D, prior_tbl,true_rate,ngen = 100000, control 
  
 	     if (i%%sample == 0) {
 			rates_temp=sig2[ind_sig2]
+			trends_temp=mu0[ind_mu0]
 			#   rel_err =  (c(a, y) - true_anc)
 			#MAE = mean(abs(c(a, y)-true_anc))
 			MAPE = mean(abs((rates_temp[IND_edge]-true_rate))/true_rate)
 			sdAPE =  sd(abs((rates_temp[IND_edge]-true_rate))/true_rate)
-			cat(c(i,sum(L)+sum(Pr), sum(L),sum(Pr), mean(sig2[ind_sig2]),mean(mu0[ind_mu0]), MAPE, sdAPE, length(sig2), rates_temp[IND_edge], a, y, "\n"),sep="\t", file=logfile, append=T) 
+			cat(c(i,sum(L)+sum(Pr), sum(L),sum(Pr), mean(sig2[ind_sig2]),mean(mu0[ind_mu0]), MAPE, sdAPE, length(sig2),length(mu0), rates_temp[IND_edge],trends_temp[IND_edge], a, y, "\n"),sep="\t", file=logfile, append=T) 
 	    }
     
 }
@@ -771,7 +772,7 @@ get_time <- function(){
 start_MCMC_sim <- function(w_dir,sim_n,sig2,ntips,ngenerations,sampling_f,nGibbs_gen,Gibbs_sample,root_calibration = c(0,100), plot_res = F){
 	setwd(w_dir)
 	ntips =50
-	S = sim_data(ntips=ntips,s2=0.1,xfold=1,n_shifts=0)
+	#S = sim_data(ntips=ntips,s2=0.1,xfold=1,n_shifts=0)
 	
 	## SIM WITH TREND
 	S = sim_data_bmt(ntips=ntips,s2=0.1,m0=0.75,root_value=0)
@@ -854,7 +855,7 @@ start_MCMC_data <- function(w_dir,tree_file,data_file,prior_file,ngenerations,sa
 resfile = sprintf("sim_%s_s2_%s_n_%s_x_%s.pdf", rep, sig2, ntips, xfold)
 pdf(file=resfile,width=0.9*15, height=1.05*15)
 par(mfrow=c(3,3))
-S = sim_data(ntips=ntips,s2=sig2,xfold=xfold,n_shifts=n_shifts)
+#S = sim_data(ntips=ntips,s2=sig2,xfold=xfold,n_shifts=n_shifts)
 S = sim_data_bmt(ntips=ntips,s2=0.1,m0=0.75,root_value=0)
 tree= S[[1]]
 full_data= S[[2]]
@@ -892,12 +893,12 @@ MAPE_median = mean(abs((rates_temp_median-true_sigmas))/true_sigmas)
 sdAPE_median = sd(abs((rates_temp_median-true_sigmas)))
 MAPE_mean = mean(abs((rates_temp_mean-true_sigmas))/true_sigmas)
 sdAPE_mean = sd(abs((rates_temp_mean-true_sigmas)))
-estK =out_tbl$K[burnin:dim(out_tbl)[1]]
+estK =out_tbl$K_sig2[burnin:dim(out_tbl)[1]]
 estK = round(quantile(estK,probs = c(0.025,0.975)))
 plot.phylo(tree, edge.width=rates_temp_median*3, main=paste("Estimated rates",sprintf("(K: %s-%s)",estK[1],estK[2])),show.tip.label = F)
 plot(true_sigmas,  main=paste("MAPE_avg:",round(MAPE_mean,3),"MAPE_med:",round(MAPE_median,3)),pch=21,col="darkblue",bg="blue",ylim=c(0,max(c(true_sigmas,rates_temp_median,rates_temp_mean))))
 points(rates_temp_median,pch=21,col="darkred",bg="red")
-points(rates_temp_mean,pch=23,col="#FFA500",bg="#FFA500")
+#points(rates_temp_mean,pch=23,col="#FFA500",bg="#FFA500")
 
 ind_anc_col = grep('anc_', colnames(out_tbl), value=F)
 anc_mean = apply(out_tbl[burnin:dim(out_tbl)[1], ind_anc_col],FUN=mean,2)
