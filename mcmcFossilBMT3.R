@@ -46,7 +46,7 @@ option_list <- list(
 parser_object <- OptionParser(usage = "Usage: %prog [Options]", option_list=option_list, description="...")
 opt <- parse_args(parser_object, args = commandArgs(trailingOnly = TRUE), positional_arguments=TRUE)
 	
-ntips            = opt$options$t
+ntips            = opt$options$t  # ADD RANGE min max number tips
 nGibbs_gen       = opt$options$n
 Gibbs_sample     = 500
 root_calibration = c(0,100)
@@ -65,26 +65,26 @@ if (sig2==0){
 	sig2 = round(runif(1,0.01,0.5),2)
 }
 
-if (mu0==100){
+if (mu0==NA){
 	mu0 = round(runif(1,-1,1),2)
 }
 
 ### TEMP SETTINGS
-#ntips            = 25
-#nGibbs_gen       = 1000
-#Gibbs_sample     = 500
-#root_calibration = c(0,100)
-#print_f          = 250
-#xfold            = 1
-#dynamicPlot      = F
-#w_dir            = "/Users/daniele/Dropbox-personal/Dropbox/fossilizedBM"
-#rep              = 1
-#sim_n            = 1
-#sig2             = 0.1
-#n_shifts         = 0
-#mu0              = 0.7
-#n_shifts_mu0     = 0
-#
+ntips            = 25
+nGibbs_gen       = 1000
+Gibbs_sample     = 500
+root_calibration = c(0,100)
+print_f          = 250
+xfold            = 1
+dynamicPlot      = F
+w_dir            = "/Users/daniele/Dropbox-personal/Dropbox/fossilizedBM"
+rep              = 1
+sim_n            = 1
+sig2             = 0.1
+n_shifts         = 0
+mu0              = 0.7
+n_shifts_mu0     = 0
+
 
 
 
@@ -741,13 +741,13 @@ simBMT_shifts<-function(tree,a=0,mu=0,sig2=1,bounds=c(-Inf,Inf),internal=T,nsim=
 
 sim_data_bmt_shifts <- function(s2,xfold_sig2,n_shifts_sig2,n_shifts_mu0,mu0){
 	print("Simulating trees")
-	tree<-sim.bd.age(age=1, numbsim=1, lambda=4, mu=1, frac = 1, mrca = FALSE,complete = TRUE, K = 0)[[1]]
+	tree<-sim.bd.age(age=1, numbsim=1, lambda=4, mu=2, frac = 1, mrca = FALSE,complete = TRUE, K = 0)[[1]]
 	if (class(tree)=="numeric"){
 		tips=0
 	}else{tips=tree$Nnode}
 	#print (tree)
-	while (tips<20 | tips>50){
-		tree<-sim.bd.age(age=1, numbsim=1, lambda=4, mu=1, frac = 1, mrca = FALSE,complete = TRUE, K = 0)[[1]]
+	while (tips<25 | tips>50){
+		tree<-sim.bd.age(age=1, numbsim=1, lambda=4, mu=2, frac = 1, mrca = FALSE,complete = TRUE, K = 0)[[1]]
 		if (class(tree)=="numeric"){
 			tips=0
 		}else{tips=tree$Nnode}
@@ -756,9 +756,9 @@ sim_data_bmt_shifts <- function(s2,xfold_sig2,n_shifts_sig2,n_shifts_mu0,mu0){
 	tree <- ladderize(tree)
 	print("Simulating data")
 	mod_tree <- tree
-	
-	x=sample.int(2,size= length(tree$tip.label),replace=T)
-	names(x)= tree$tip.label
+	ntips = length(tree$tip.label)
+	# x=sample.int(2,size= length(tree$tip.label),replace=T)
+	# names(x)= tree$tip.label
 	
 	# Martha\s code
 	ttree=make.era.map(tree,0)
@@ -797,12 +797,14 @@ sim_data_bmt_shifts <- function(s2,xfold_sig2,n_shifts_sig2,n_shifts_mu0,mu0){
 		for (s in 1:n_shifts){
 			ind_desc_nodes=c()
 			#while (length(ind_desc_edges)<15 | length(ind_desc_edges)>25 ){
-			while (length(ind_desc_nodes[ind_desc_nodes<ntips])<15 | length(ind_desc_nodes[ind_desc_nodes<ntips])>25 ){
+			while (length(ind_desc_nodes[ind_desc_nodes<ntips])<15 | length(ind_desc_nodes[ind_desc_nodes<ntips])>25 ){ ### CHANGE RANGE TO A PERCENTAGE OF N TIPS
 				i = rnd_sample_tax[j]
 				ind_desc_nodes = getDescendants(tree, node=i)
 				ind_desc_edges = which(tree$edge[,2]%in% ind_desc_nodes == T)
 				ind_desc_edges = c(ind_desc_edges, which(tree$edge[,2]==i))
 				j=j+1
+				print(c(i, length(intersect(chosen_nodes,ind_desc_nodes))))
+				
 				if (length(intersect(chosen_nodes,ind_desc_nodes))>0){ind_desc_nodes=c(1)}			
 			}
 			print(c(i, length(intersect(chosen_nodes,ind_desc_nodes))))
@@ -812,12 +814,39 @@ sim_data_bmt_shifts <- function(s2,xfold_sig2,n_shifts_sig2,n_shifts_mu0,mu0){
 	}else{ind_desc_edges=c(0)}
 	
 	names(sigmas2)  = NULL # names(col)#  #names_l
+
+	# SHIFTS in TRENDS
+	rnd_sample_tax = sample((1:ntips)+ntips, ntips)
+	chosen_nodes =c()
+	r_multipliers = rnorm(n_shifts_mu0, 2,0.5)*sample(c(-1,1),1)
+	j=1
+	if (n_shifts_mu0>=1){
+		for (s in 1:n_shifts_mu0){
+			ind_desc_nodes=c()
+			#while (length(ind_desc_edges)<15 | length(ind_desc_edges)>25 ){
+			while (length(ind_desc_nodes[ind_desc_nodes<ntips])<15 | length(ind_desc_nodes[ind_desc_nodes<ntips])>25 ){ ### CHANGE RANGE TO A PERCENTAGE OF N TIPS
+				i = rnd_sample_tax[j]
+				ind_desc_nodes = getDescendants(tree, node=i)
+				ind_desc_edges = which(tree$edge[,2]%in% ind_desc_nodes == T)
+				ind_desc_edges = c(ind_desc_edges, which(tree$edge[,2]==i))
+				j=j+1
+				print(c(i, length(intersect(chosen_nodes,ind_desc_nodes))))
+				
+				if (length(intersect(chosen_nodes,ind_desc_nodes))>0){ind_desc_nodes=c(1)}			
+			}
+			print(c(i, length(intersect(chosen_nodes,ind_desc_nodes))))
+			chosen_nodes= append(chosen_nodes,ind_desc_nodes)
+			mu0s[ind_desc_edges] = r_multipliers[s] # (xfold*s)
+		}
+	}else{ind_desc_edges=c(0)}
+
+
 	names(mu0s)  = NULL # names(col)#  #names_l
 	
 	#plot(mod_tree)
 	#edgelabels()
 	#nodelabels()
-	print (c("\n\nRATES:",sigmas2,mu0s))
+	#print (c("\n\nRATES:",sigmas2,mu0s))
 	full_data <- simBMT_shifts(ttree, sig2=sigmas2, a=0, nsim=1,mu=mu0s)
 	
 	plot.phylo(tree, edge.width=sigmas2*3,show.tip.label = F, main="True rates")
@@ -831,115 +860,18 @@ sim_data_bmt_shifts <- function(s2,xfold_sig2,n_shifts_sig2,n_shifts_mu0,mu0){
 	#full_data<-fastBM(tree, sig2=s2, a=0, internal=T);
 	
 	#tree$edge = tree$edge*100
-	phenogram(ttree, full_data,add=F, col=col, main="Traigram")
+	phenogram(ttree, full_data,add=F, col=col, main="Traigram") ## PROBABLY BETTER NOT TO PLOT
 	
 	return(c(tree,full_data,sigmas2,mu0s))
 }
 
-sim_data <- function(ntips=20,s2=0.1,xfold=16,n_shifts=1){
-	print("Simulating trees")
-	#tree<-ladderize(pbtree(n=ntips, scale=1))
-
-	tree<-sim.bd.age(age=1, numbsim=1, lambda=4, mu=1, frac = 1, mrca = FALSE,complete = TRUE, K = 0)[[1]]
-	if (class(tree)=="numeric"){
-		tips=0
-	}else{tips=tree$Nnode}
-	print (tree)
-	while (tips<20 | tips>50){
-		tree<-sim.bd.age(age=1, numbsim=1, lambda=4, mu=1, frac = 1, mrca = FALSE,complete = TRUE, K = 0)[[1]]
-		if (class(tree)=="numeric"){
-			tips=0
-		}else{tips=tree$Nnode}
-		print (tree)
-	}
-	tree <- ladderize(tree)
-
-
-
-	print("Simulating data")
-	mod_tree <- tree
-	
-	x=sample.int(2,size= length(tree$tip.label),replace=T)
-	names(x)= tree$tip.label
-	
-	# Martha\s code
-	ttree=make.era.map(tree,0)
-	phy=tree
-	# adjusting it to our data
-	for (m in c(1:length(phy$edge.length))){
-	    names(ttree$maps[[m]])=m
-	    }
-	
-	test=matrix(0,ncol=length(phy$edge.length), nrow=length(phy$edge.length))
-	rownames(test)=rownames(ttree$mapped.edge)
-	colnames(test)=c(1:length(phy$edge.length))
-	
-	diag(test)=ttree$edge.length
-	ttree$mapped.edge=test
-	
-	# verifying is done !
-	#col = sample(colours(),length(phy$edge.length)) 
-	col = rep("black",length(phy$edge.length))
-	names(col)=c(1:length(phy$edge.length))
-	#plotSimmap(ttree, colors=col)
-	
-	# preparing rates for the simualtion 
-	sigmas2= rep(s2,length(phy$edge.length))
-	
-	
-	#### HERE!!!
-	#__ plot(tree)
-	#__ nodelabels()
-	#__ edgelabels()
-	rnd_sample_tax = sample((1:ntips)+ntips, ntips)
-	chosen_nodes =c()
-	r_multipliers = runif(n_shifts,8,16)
-	j=1
-	if (n_shifts>=1){
-		for (s in 1:n_shifts){
-			ind_desc_nodes=c()
-			#while (length(ind_desc_edges)<15 | length(ind_desc_edges)>25 ){
-			while (length(ind_desc_nodes[ind_desc_nodes<ntips])<15 | length(ind_desc_nodes[ind_desc_nodes<ntips])>25 ){
-				i = rnd_sample_tax[j]
-				ind_desc_nodes = getDescendants(tree, node=i)
-				ind_desc_edges = which(tree$edge[,2]%in% ind_desc_nodes == T)
-				ind_desc_edges = c(ind_desc_edges, which(tree$edge[,2]==i))
-				j=j+1
-				if (length(intersect(chosen_nodes,ind_desc_nodes))>0){ind_desc_nodes=c(1)}			
-			}
-			print(c(i, length(intersect(chosen_nodes,ind_desc_nodes))))
-			chosen_nodes= append(chosen_nodes,ind_desc_nodes)
-			sigmas2[ind_desc_edges] = s2*r_multipliers[s] # (xfold*s)
-		}
-	}else{ind_desc_edges=c(0)}
-	
-	names(sigmas2)  = NULL # names(col)#  #names_l
-	
-	#plot(mod_tree)
-	#edgelabels()
-	#nodelabels()
-	full_data <- sim.rates(ttree, sig2=sigmas2, anc=0, nsim=1, internal=T, plot=F)
-	
-	plot.phylo(tree, edge.width=sigmas2*3,show.tip.label = F, main="True rates")
-	#print(sigmas2)
-	
-	#alter_ind = tree$edge[alter,2]
-	
-	
-	edge_w=abs(full_data[ttree$edge[,1]] - full_data[ttree$edge[,2]])/sqrt(tree$edge.length)
-	plot.phylo(tree, edge.width=edge_w*3,show.tip.label = F,main="Empirical rates")
-	#full_data<-fastBM(tree, sig2=s2, a=0, internal=T);
-	
-	#tree$edge = tree$edge*100
-	phenogram(ttree, full_data,add=F, col=col, main="Traigram")
-	
-	return(c(tree,full_data,sigmas2))
-}
 
 get_time <- function(){
 	return(sum(as.numeric(strsplit(format(Sys.time(), "%X"),":")[[1]])*c(3600,60,1)))
 }
 
+
+### PROBABLY USELESS STUFF
 start_MCMC_sim <- function(w_dir,sim_n,sig2,ntips,ngenerations,sampling_f,nGibbs_gen,Gibbs_sample,root_calibration = c(0,100), plot_res = F){
 	setwd(w_dir)
 	ntips =50
@@ -1018,7 +950,7 @@ start_MCMC_data <- function(w_dir,tree_file,data_file,prior_file,ngenerations,sa
 	cat("\nRun time:", get_time() - t1, sep="\t")
 
 }
-
+### END PROBABLY USELESS STUFF
 
 
 
@@ -1054,9 +986,9 @@ mcmc.gibbs4(tree, data, D, prior_tbl, true_rate=true_sigmas, ngen= nGibbs_gen,bd
 	sample=Gibbs_sample,dynamicPlot=dynamicPlot,useTrend=T) 
 cat("\nTime Gibbs:", get_time() - t1, "\n", sep="\t")
 
-logfile2 = sprintf("sim_%s_n_%s_s2_%s_x_%s_mu_%s_%s_const.log", rep, ntips, sig2, xfold, mu0, n_shifts_mu0)
-mcmc.gibbs4(tree, data, D, prior_tbl, true_rate=true_sigmas, ngen= nGibbs_gen/10,bdmcmc_freq=0  ,logfile=logfile2,update_sig_freq=0.5,
-	sample=Gibbs_sample/10,dynamicPlot=dynamicPlot,useTrend=F)
+# logfile2 = sprintf("sim_%s_n_%s_s2_%s_x_%s_mu_%s_%s_const.log", rep, ntips, sig2, xfold, mu0, n_shifts_mu0)
+# mcmc.gibbs4(tree, data, D, prior_tbl, true_rate=true_sigmas, ngen= nGibbs_gen/10,bdmcmc_freq=0  ,logfile=logfile2,update_sig_freq=0.5,
+# 	sample=Gibbs_sample/10,dynamicPlot=dynamicPlot,useTrend=F)
 
 	
 # plot res
@@ -1098,31 +1030,31 @@ phenogram(tree, est_anc_states,add=T, col="blue", main="Traigram")
 
 
 
-
-out_tbl = read.table(logfile2,header=T)
-ind_sig2_col = grep('sig2_', colnames(out_tbl), value=F)
-burnin= round(0.25*dim(out_tbl)[1])
-rates_temp_median = apply(out_tbl[burnin:dim(out_tbl)[1], ind_sig2_col],FUN=median,2)
-rates_temp_mean = apply(out_tbl[burnin:dim(out_tbl)[1], ind_sig2_col],FUN=mean,2)
-MAPE_median = mean(abs((rates_temp_median-true_sigmas))/true_sigmas)
-sdAPE_median = sd(abs((rates_temp_median-true_sigmas)))
-MAPE_mean = mean(abs((rates_temp_mean-true_sigmas))/true_sigmas)
-sdAPE_mean = sd(abs((rates_temp_mean-true_sigmas)))
-ind_anc_col = grep('anc_', colnames(out_tbl), value=F)
-anc_mean = apply(out_tbl[burnin:dim(out_tbl)[1], ind_anc_col],FUN=mean,2)
-mape = round(mean(abs(anc_mean-true_anc)/(max(true_anc)-min(true_anc))),3)
-#plot.phylo(tree, edge.width=rates_temp_median*3, main="Estimated rates",show.tip.label = F)
-names(anc_mean) = names(true_anc)
-est_anc_states = c(data,anc_mean)
-phenogram(tree, full_data,add=F, col=alpha("black",0.2), main="Traigram",ylim=c(min(est_anc_states,full_data),max(est_anc_states,full_data)))
-phenogram(tree, est_anc_states,add=T, col="blue", main="Traigram")
-
-plot(true_sigmas,  main=paste("MAPE_avg:",round(MAPE_mean,3),"MAPE_med:",round(MAPE_median,3)),pch=21,col="darkblue",bg="blue",ylim=c(0,max(c(true_sigmas,rates_temp_median,rates_temp_mean))))
-points(rates_temp_median,pch=21,col="darkred",bg="red")
-#points(rates_temp_mean,pch=23,col="#FFA500",bg="#FFA500")
-
-plot(anc_mean, true_anc, xlab="estimated anc states", ylab="true anc states",main=paste("Anc states",sprintf("(MAPE: %s)",mape)))
-abline(coef=c(0,1),lty=2)
+# PLOT CONST RATE ANALYSIS
+# out_tbl = read.table(logfile2,header=T)
+# ind_sig2_col = grep('sig2_', colnames(out_tbl), value=F)
+# burnin= round(0.25*dim(out_tbl)[1])
+# rates_temp_median = apply(out_tbl[burnin:dim(out_tbl)[1], ind_sig2_col],FUN=median,2)
+# rates_temp_mean = apply(out_tbl[burnin:dim(out_tbl)[1], ind_sig2_col],FUN=mean,2)
+# MAPE_median = mean(abs((rates_temp_median-true_sigmas))/true_sigmas)
+# sdAPE_median = sd(abs((rates_temp_median-true_sigmas)))
+# MAPE_mean = mean(abs((rates_temp_mean-true_sigmas))/true_sigmas)
+# sdAPE_mean = sd(abs((rates_temp_mean-true_sigmas)))
+# ind_anc_col = grep('anc_', colnames(out_tbl), value=F)
+# anc_mean = apply(out_tbl[burnin:dim(out_tbl)[1], ind_anc_col],FUN=mean,2)
+# mape = round(mean(abs(anc_mean-true_anc)/(max(true_anc)-min(true_anc))),3)
+# #plot.phylo(tree, edge.width=rates_temp_median*3, main="Estimated rates",show.tip.label = F)
+# names(anc_mean) = names(true_anc)
+# est_anc_states = c(data,anc_mean)
+# phenogram(tree, full_data,add=F, col=alpha("black",0.2), main="Traigram",ylim=c(min(est_anc_states,full_data),max(est_anc_states,full_data)))
+# phenogram(tree, est_anc_states,add=T, col="blue", main="Traigram")
+#
+# plot(true_sigmas,  main=paste("MAPE_avg:",round(MAPE_mean,3),"MAPE_med:",round(MAPE_median,3)),pch=21,col="darkblue",bg="blue",ylim=c(0,max(c(true_sigmas,rates_temp_median,rates_temp_mean))))
+# points(rates_temp_median,pch=21,col="darkred",bg="red")
+# #points(rates_temp_mean,pch=23,col="#FFA500",bg="#FFA500")
+#
+# plot(anc_mean, true_anc, xlab="estimated anc states", ylab="true anc states",main=paste("Anc states",sprintf("(MAPE: %s)",mape)))
+# abline(coef=c(0,1),lty=2)
 
 n<-dev.off()
 
