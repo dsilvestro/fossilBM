@@ -1,12 +1,21 @@
-import glob
+#!/usr/local/bin/python
+# version: 2.7.10
+
+import sys
 from time import time
 import dendropy as dp
 from numpy.random import poisson, uniform
 
+BD_treefile=sys.argv[1]
+FBD_treefile=sys.argv[2]
+q=float(sys.argv[3])
+
+# commandline: python simulate_fossils_on_tree.py BD_treefile FBD_treefile q
+
 #####################################################################################################
 # This script takes a tree with extant and extinct lineages. 
 # It adds poisson numbers of fossil on each branch, which depend on the branch length and the rate 
-# of fossil discovery (?), q. Each fossil takes the form of a new leaf having a 0.00001 branch length
+# of fossil discovery, q. Each fossil takes the form of a new leaf having a 0.00001 branch length
 # In a second step, extinct lineages (except fossils) are pruned from the tree. The resulting tree 
 # can therefore have a smaller root age than the original tree. In the case where the root node of 
 # the tree has a branch length, fossils older than root can be added. 
@@ -44,18 +53,16 @@ def is_extant_leaf(tree, node):
 
 #####################################################################################################
 
-def simulate_fossils_on_tree(tree):
+def simulate_fossils_on_tree(tree,q):
 	""" the main function to simulate fossils on a tree """
 	# update its bipartitions (way of indexing the edges)
 	tree.update_bipartitions()
 	# get age of the root
 	root_age=tree.max_distance_from_root()
-	# rate of fossil discovery
-	q=0.1
 	# store taxon label needed to be kept (the extant and fossils leaves)
 	taxon_label_to_keep=[]
 	# fossil id
-	f=0
+	f=1
 	# loop through bipartitions
 	for i in range(len(tree.bipartition_encoding)):
 		# access the edge through the bipartitions-edges hash
@@ -85,21 +92,38 @@ def simulate_fossils_on_tree(tree):
 	tree.retain_taxa_with_labels(taxon_label_to_keep)
 	return tree
 
-paths=glob.glob('./1000/*.nwk')
-#paths=['tree.nwk']
-print('start!')
-for i in range(len(paths)):
-	print str(i)
-	start=time()
-	# read tree
-	tree = dp.Tree.get(path=paths[i], schema="newick",rooting='force-rooted')
-	# number edges
-	n_edges=len(tree.edges())
-	tree = simulate_fossils_on_tree(tree)
-	end=time()-start
-	print("%s\n%s\tedges\n%s"%(paths[i],str(n_edges),str(end)))
-	# write final tree
-	tree.write(path="1000/%s_out.tree"%(str(i)), schema="newick")
-print('end!')
+### main function ##################################################################################
+
+def main_IO_BDtree_2_FBDtree(BD_treefile,FBD_treefile,q):
+	""" main function that takes a tree file and write the FBD tree """
+	# read the tree (comming from treeSim)
+	tree = dp.Tree.get(path=BD_treefile, schema="newick",rooting='force-rooted')
+	# add fossils
+	tree = simulate_fossils_on_tree(tree,q)
+	# write fbd tree
+	tree.write(path=FBD_treefile, schema='newick')
+
+#####################################################################################################
+
+main_IO_BDtree_2_FBDtree(BD_treefile,FBD_treefile,q)
+
+# Benchmarking :
+# import glob
+#paths=glob.glob('./1000/*.nwk')
+##paths=['tree.nwk']
+#print('start!')
+#for i in range(len(paths)):
+#	print str(i)
+#	start=time()
+#	# read tree
+#	tree = dp.Tree.get(path=paths[i], schema="newick",rooting='force-rooted')
+#	# number edges
+#	n_edges=len(tree.edges())
+#	tree = simulate_fossils_on_tree(tree,q)
+#	end=time()-start
+#	print("%s\n%s\tedges\n%s"%(paths[i],str(n_edges),str(end)))
+#	# write final tree
+#	tree.write(path="1000/%s_out.tree"%(str(i)), schema="newick")
+#print('end!')
 
 
