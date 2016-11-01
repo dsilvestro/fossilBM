@@ -11,7 +11,7 @@ library(optparse)
 library(scales)
 
 use_loc_libraries = 0
-useBMT=FALSE 
+useBMT=TRUE 
 
 if (use_loc_libraries==0){
 	require(phytools)
