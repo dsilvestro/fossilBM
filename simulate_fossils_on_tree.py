@@ -1,6 +1,3 @@
-#!/usr/local/bin/python
-# version: 2.7.10
-
 import sys
 from time import time
 import dendropy as dp
