@@ -1,7 +1,8 @@
 # Scripts used in:
 # Evolutionary history of New World monkeys revealed by molecular and fossil data
 # by D Silvestro, M F Tejedor, M L Serrano-Serrano, O Loiseau, V Rossier, J Rolland, A Zizka, A Antonelli, N Salamin
-# 
+# http://www.biorxiv.org/content/early/2017/08/18/178111
+# doi: https://doi.org/10.1101/178111
 
 
 # RUN ANALYSIS ON SIMULATED DATA and PLOT RESULTS
