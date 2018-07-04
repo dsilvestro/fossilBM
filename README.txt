@@ -1,8 +1,13 @@
-# Scripts used in:
+# The "fossilized" Brownian model of quantitative trait evolution used in:
 # Evolutionary history of New World monkeys revealed by molecular and fossil data
-# by D Silvestro, M F Tejedor, M L Serrano-Serrano, O Loiseau, V Rossier, J Rolland, A Zizka, A Antonelli, N Salamin
-# http://www.biorxiv.org/content/early/2017/08/18/178111
-# doi: https://doi.org/10.1101/178111
+# by D Silvestro, M F Tejedor et al. in 
+# https://academic.oup.com/sysbio/advance-article/doi/10.1093/sysbio/syy046/5040681
+
+# The method uses Bayesian MCMC sampling to jointly infer the rates and trends of 
+# evolution for a continuous trait and the ancestral states at all nodes. 
+# The approach is particularly designed to analyze trees with extinct lineages
+# e.g. inferred usign tip-dating methods, and allows for shifts in rates and trend
+# parameters.
 
 
 # RUN ANALYSIS ON SIMULATED DATA and PLOT RESULTS
