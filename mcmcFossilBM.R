@@ -1,21 +1,13 @@
 #!/usr/bin/Rscript
-# version 20150713
-
-
-# module add R/3.0.2
-# cd /scratch/ul/monthly/dsilvest/BM && RScript mcmcFossilBM-BD.R --wd /scratch/ul/monthly/dsilvest/BM --j %s --v 8 --s 2 --r 0.1 --t 100
-
 
 arg <- commandArgs(trailingOnly=TRUE)
 library(optparse)
 library(scales)
 
-use_loc_libraries = 0
-useBMT=TRUE 
-
 require(phytools)
 library(geiger)
 library(TreeSim)
+
 
 ##################################################
 
@@ -25,15 +17,16 @@ option_list <- list(
 	make_option("--plot_res", type="integer",   default=1,    help=("plot pdf file (%default)"), metavar="plotf"),
 
 	# SIMULATION SETTINGS
-	make_option("--t",    type="integer",  default=50, help=("Tree size (%default)"),metavar="ntips"),
-	make_option("--v",    type="double",   default=16, help=("Magnitude rate shift (%default)"),metavar="xfold"),    
-	make_option("--r",    type="double",   default=0,  help=("Baseline rate (%default)"),metavar="rate"),    
-	make_option("--s",    type="integer",  default=0,  help=("no. shifts sig2 (%default)"),metavar="shifts"),
-	make_option("--mu",   type="double",   default=NA, help=("mu0 (%default)"),metavar="shifts"),
-	make_option("--sm",   type="integer",  default=0,  help=("no. shifts mu0 (%default)"),metavar="shifts"),
-	make_option("--rda",  type="integer",  default=0,  help=("if 1 use existing RDA file (%default)"), metavar="rda"),
-	make_option("--qfos", type="integer",  default=20, help=("Mean number of simulated fossils"), metavar="qfos"),
-	make_option("--j",    type="integer",  default=1,  help=("Simulation number (%default)"),metavar="replicate"),
+	make_option("--t",          type="integer",  default=50, help=("Tree size (%default)"),metavar="ntips"),
+	make_option("--v",          type="double",   default=16, help=("Magnitude rate shift (%default)"),metavar="xfold"),    
+	make_option("--r",          type="double",   default=0,  help=("Baseline rate (%default)"),metavar="rate"),    
+	make_option("--s",          type="integer",  default=0,  help=("no. shifts sig2 (%default)"),metavar="shifts"),
+	make_option("--mu",         type="double",   default=NA, help=("mu0 (%default)"),metavar="shifts"),
+	make_option("--sm",         type="integer",  default=0,  help=("no. shifts mu0 (%default)"),metavar="shifts"),
+	make_option("--rda",        type="integer",  default=0,  help=("if 1 use existing RDA file (%default)"), metavar="rda"),
+	make_option("--qfos",       type="integer",  default=20, help=("Mean number of simulated fossils"), metavar="qfos"),
+	make_option("--j",          type="integer",  default=1,  help=("Simulation number (%default)"),metavar="replicate"),
+	make_option("--drop_extant",type="double",   default=0,  help=("Fraction of extant tips to be dropped"),metavar="rho"),
 	
 	# COMMANDS FOR EMPIRICAL ANALYSIS
 	make_option("--out",      type="character", default="",   help=("name of (%default)"), metavar=""),
@@ -71,6 +64,10 @@ dfile		       = opt$options$dfile
 remF 		       = opt$options$rmF
 log_trait_data     = opt$options$log
 rescale_trait_data = opt$options$rescale
+dropRandomTaxa     = opt$options$drop_extant
+useBMT=TRUE 
+
+
 
 # qfos = 20 is the default, qfos can be any number e.g. 5, but if qfos is 1, it takes only the oldest fossil of ~20 simulated
 
@@ -94,7 +91,10 @@ if (use_RDA==1){
 	print(paste("Loading ", res_all_files))
 	use_RDA=1
 	print(use_RDA)
+	nGibbs_gen = 250000
+	print_f = 100000
 }
+
 
 
 update_multiplier_proposal <- function(i,d){
@@ -726,6 +726,15 @@ sim_data_bmt_shifts <- function(s2,xfold_sig2,n_shifts_sig2,n_shifts_mu0,mu0){
 		tree <- oldest_fossil_tree
 			}
 		
+	if (dropRandomTaxa > 0){
+		extant_tips <- getExtant(tree)
+		rm_taxa= sample(extant_tips,size=round((1-dropRandomTaxa) * length(extant_tips)))
+		print(paste("Dropping ", round(dropRandomTaxa * length(extant_tips)), " extant taxa",sep=" "))
+		tree <- drop.tip(tree, rm_taxa)
+		print(length(getExtant(tree)))
+	}
+	
+	
 			
 	if (file.exists(temp_tree)) file.remove(temp_tree)
 	if (file.exists(FBD_temp)) file.remove(FBD_temp)
@@ -821,7 +830,7 @@ sim_data_bmt_shifts <- function(s2,xfold_sig2,n_shifts_sig2,n_shifts_mu0,mu0){
 	full_data <- simBMT_shifts(ttree, sig2=sigmas2, a=0, nsim=1,mu=mu0s)
 	
 		
-	return(c(tree,full_data,sigmas2,mu0s,original_simulated_tree, q_fossil, ttree))
+	return(list(tree,full_data,sigmas2,mu0s,original_simulated_tree, q_fossil, ttree))
 }
 
 
@@ -833,6 +842,8 @@ get_time <- function(){
 #################### RUN SIMULATION
 #S = sim_data(ntips=ntips,s2=sig2,xfold=xfold,n_shifts=n_shifts)
 #S = sim_data_bmt(ntips=ntips,s2=0.1,m0=0.75,root_value=0)
+
+
 
 if (use_RDA==0) { 	
 	if (treefile != "NA") { 
@@ -859,7 +870,7 @@ if (use_RDA==0) {
 			extant_tree <- drop.tip(t, fossil_tips)
 			t<- extant_tree
 			} 
-
+		
 		trait <- read.table(dfile, header=F,row.names=1)
 		treetrait <- treedata(t,trait) # match trait data and phylogeny
 		tree <- treetrait$phy
@@ -885,86 +896,87 @@ if (use_RDA==0) {
 
 	} else {
 
-	worked<-0
-	while (worked==0) {
-		S <- try(sim_data_bmt_shifts(s2=sig2,mu0=mu0,xfold_sig2=xfold,n_shifts_sig2=n_shifts,n_shifts_mu0=n_shifts_mu0), silent=F)
-		if ('try-error' %in% class(S)) worked <-0
-		else worked <-1
-		} 
-	tree= S[[1]]
-	ntips=tree$Nnode+1
-	full_data= S[[2]]
-	data <- S[[2]][names(S[[2]]) %in% tree$tip.label]
-	true_anc = S[[2]][names(S[[2]]) %in% tree$edge]
-	names_true_anc = names(true_anc)
-	D <- build_table(tree, ntips,data)
-	BR= branching.times(tree) # sorted from root to most recent
-	dist_from_root = max(BR)-BR
-	#phenogram(tree, full_data,add=F, col=rep("black",length(full_data)))
-	alter_ind= S[[3]]
-	true_sigmas = S[[3]]
-	true_mu0s = S[[4]]
-	original_simulated_tree <- S[[5]]
-	q_fossil= S[[6]]
-	ttree= S[[7]]
-	name_tag=""
-	rda_exist=0
+		worked<-0
+		while (worked==0) {
+			S <- try(sim_data_bmt_shifts(s2=sig2,mu0=mu0,xfold_sig2=xfold,n_shifts_sig2=n_shifts,n_shifts_mu0=n_shifts_mu0), silent=F)
+			if ('try-error' %in% class(S)) worked <-0
+			else worked <-1
+			} 
+		tree= S[[1]]
+		ntips=tree$Nnode+1
+		full_data= S[[2]]
+		data <- S[[2]][names(S[[2]]) %in% tree$tip.label]
+		true_anc = S[[2]][names(S[[2]]) %in% tree$edge]
+		names_true_anc = names(true_anc)
+		D <- build_table(tree, ntips,data)
+		BR= branching.times(tree) # sorted from root to most recent
+		dist_from_root = max(BR)-BR
+		#phenogram(tree, full_data,add=F, col=rep("black",length(full_data)))
+		alter_ind= S[[3]]
+		true_sigmas = S[[3]]
+		true_mu0s = S[[4]]
+		original_simulated_tree <- S[[5]]
+		q_fossil= S[[6]]
+		ttree= S[[7]]
+		name_tag=""
+		rda_exist=0
 
-	}
+		}
 
 
-} else if (extant_only==1) {
-	tree=S[[1]]
-	original_simulated_tree <- S[[5]]
-	q_fossil= S[[6]]
-	ttree= S[[7]]
-	fossil_tips <- setdiff(tree$tip.label, getExtant(tree))
-	extant_tree <- drop.tip(tree, fossil_tips)
-	extant_tips <- getExtant(tree)
-	ind_extant <- which(tree$tip.label %in% extant_tips)
-	remove_edge <- vector()
-	remove_node <- vector()
+	} else if (extant_only==1) {
+		tree=S[[1]]
+		original_simulated_tree <- S[[5]]
+		q_fossil= S[[6]]
+		ttree= S[[7]]
+		fossil_tips <- setdiff(tree$tip.label, getExtant(tree))
+		extant_tree <- drop.tip(tree, fossil_tips)
+		extant_tips <- getExtant(tree)
+		ind_extant <- which(tree$tip.label %in% extant_tips)
+		remove_edge <- vector()
+		remove_node <- vector()
 
-	for (i in 1:nrow(tree$edge)) { 
-		if (length ( intersect(getDescendants(tree, tree$edge[i,2]), ind_extant )) == 0 ) {
-			remove_edge <- append(remove_edge, i)
-			remove_node <- append(remove_node, tree$edge[i,1])
-				} 
-	}
-	full_data= S[[2]]
-	true_sigmas = S[[3]][-remove_edge]
-	true_mu0s = S[[4]][-remove_edge]
-	true_anc = S[[2]][names(S[[2]]) %in% tree$edge]
-	true_anc = true_anc [- which(names(true_anc) %in% unique(remove_node)) ]
-	names_true_anc = names(true_anc)
-	tree<- extant_tree
-	data<- data[-which(names(data) %in% fossil_tips)]
-	name_tag="_extant_only"
-	ntips=tree$Nnode+1
-	D <- build_table(tree, ntips,data)
-	BR= branching.times(tree) # sorted from root to most recent
-	dist_from_root = max(BR)-BR
-}else{
-	tree= S[[1]]
-	ntips=tree$Nnode+1
-	full_data= S[[2]]
-	data <- S[[2]][names(S[[2]]) %in% tree$tip.label]
-	true_anc = S[[2]][names(S[[2]]) %in% tree$edge]
-	names_true_anc = names(true_anc)
-	D <- build_table(tree, ntips,data)
-	BR= branching.times(tree) # sorted from root to most recent
-	dist_from_root = max(BR)-BR
-	#phenogram(tree, full_data,add=F, col=rep("black",length(full_data)))
-	alter_ind= S[[3]]
-	true_sigmas = S[[3]]
-	true_mu0s = S[[4]]
-	original_simulated_tree <- S[[5]]
-	q_fossil= S[[6]]
-	ttree= S[[7]]
-	name_tag=""
-	rda_exist=0
+		for (i in 1:nrow(tree$edge)) { 
+			if (length ( intersect(getDescendants(tree, tree$edge[i,2]), ind_extant )) == 0 ) {
+				remove_edge <- append(remove_edge, i)
+				remove_node <- append(remove_node, tree$edge[i,1])
+					} 
+		}
+		full_data= S[[2]]
+		true_sigmas = S[[3]][-remove_edge]
+		true_mu0s = S[[4]][-remove_edge]
+		true_anc = S[[2]][names(S[[2]]) %in% tree$edge]
+		true_anc = true_anc [- which(names(true_anc) %in% unique(remove_node)) ]
+		names_true_anc = names(true_anc)
+		tree<- extant_tree
+		data<- data[-which(names(data) %in% fossil_tips)]
+		name_tag="_extant_only"
+		ntips=tree$Nnode+1
+		D <- build_table(tree, ntips,data)
+		BR= branching.times(tree) # sorted from root to most recent
+		dist_from_root = max(BR)-BR
 	
-}
+	} else{
+		tree= S[[1]]
+		ntips=tree$Nnode+1
+		full_data= S[[2]]
+		data <- S[[2]][names(S[[2]]) %in% tree$tip.label]
+		true_anc = S[[2]][names(S[[2]]) %in% tree$edge]
+		names_true_anc = names(true_anc)
+		D <- build_table(tree, ntips,data)
+		BR= branching.times(tree) # sorted from root to most recent
+		dist_from_root = max(BR)-BR
+		#phenogram(tree, full_data,add=F, col=rep("black",length(full_data)))
+		alter_ind= S[[3]]
+		true_sigmas = S[[3]]
+		true_mu0s = S[[4]]
+		original_simulated_tree <- S[[5]]
+		q_fossil= S[[6]]
+		ttree= S[[7]]
+		name_tag=""
+		rda_exist=0
+	
+	}
 
 # define output name
 if (treefile != "NA"){
@@ -1010,6 +1022,7 @@ print("Starting MCMC...")
 t1 = get_time()
 
 logfile3 = sprintf("%s.log", filename)
+
 
 mcmc.gibbs4(tree, data, D, prior_tbl, true_rate=true_sigmas, ngen= nGibbs_gen,bdmcmc_freq=0.75,logfile=logfile3,update_sig_freq=0.5,
 	sample=Gibbs_sample,print_freq=print_f,dynamicPlot=dynamicPlot,useTrend=useBMT) 
