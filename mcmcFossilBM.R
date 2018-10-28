@@ -29,13 +29,15 @@ option_list <- list(
 	make_option("--drop_extant",type="double",   default=0,  help=("Fraction of extant tips to be dropped"),metavar="rho"),
 	
 	# COMMANDS FOR EMPIRICAL ANALYSIS
-	make_option("--out",      type="character", default="",   help=("name of (%default)"), metavar=""),
-	make_option("--tfile",    type="character", default="NA", help=("Name of tree nexus file"), metavar="tfile"),
-	make_option("--tindex",   type="integer",   default=1,    help=("Index of the tree"), metavar="tindex"),
-	make_option("--dfile",    type="character", default="NA", help=("Name of trait file"), metavar="dfile"),
-	make_option("--rmF",      type="integer",   default=0,    help=("Set to 1 to remove extinct tips"), metavar="rmF"),
-	make_option("--log",      type="double",    default=0,    help=("log transform data - opts: 10 (log10), 1 (ln), 0 (no transform)"),metavar="log"),
-	make_option("--rescale",  type="double",    default=1,    help=("multiply trait"),metavar="log")
+	make_option("--out",       type="character", default="",   help=("name of (%default)"), metavar=""),
+	make_option("--tfile",     type="character", default="NA", help=("Name of tree nexus file"), metavar="tfile"),
+	make_option("--tindex",    type="integer",   default=1,    help=("Index of the tree"), metavar="tindex"),
+	make_option("--dfile",     type="character", default="NA", help=("Name of trait file"), metavar="dfile"),
+	make_option("--rmF",       type="integer",   default=0,    help=("Set to 1 to remove extinct tips"), metavar="rmF"),
+	make_option("--log",       type="double",    default=0,    help=("log transform data - opts: 10 (log10), 1 (ln), 0 (no transform)"),metavar="log"),
+	make_option("--rescale",   type="double",    default=1,    help=("multiply trait"),metavar="rescale"),
+	make_option("--useBMT",    type="integer",   default=1,    help=("set to 0 to remove trend parameter"),metavar="useBMT"),
+	make_option("--constRate", type="integer",   default=0,    help=("set to 0 to remove trend parameter"),metavar="constRate")
 	)
 
 parser_object <- OptionParser(usage = "Usage: %prog [Options]", option_list=option_list, description="...")
@@ -65,8 +67,16 @@ remF 		       = opt$options$rmF
 log_trait_data     = opt$options$log
 rescale_trait_data = opt$options$rescale
 dropRandomTaxa     = opt$options$drop_extant
-useBMT=TRUE 
-
+if (opt$options$useBMT==1){
+	useBMT=TRUE
+}else{
+	useBMT=FALSE
+}
+if (opt$options$constRate==1){
+	constRate=TRUE
+}else{
+	constRate=FALSE	
+} 
 
 
 # qfos = 20 is the default, qfos can be any number e.g. 5, but if qfos is 1, it takes only the oldest fossil of ~20 simulated
@@ -575,6 +585,7 @@ mcmc.gibbs4 <- function (tree, x, D, prior_tbl,true_rate,ngen = 100000, control 
 				if (useTrend==T){
 					death_sig2=sample(2,1)
 				}else{death_sig2=1}
+				if (constRate==T){death_sig2=2}	
 				bdmcmc_list   = run_BDMCMC(tree, trait_states, sig2.prime,ind_sig2, mu0.prime, ind_mu0,D,IND_edge,new_ind,desc_index_list,death_sig2)
 				sig2.prime    = bdmcmc_list[[1]]
 				ind_sig2      = bdmcmc_list[[2]]					
