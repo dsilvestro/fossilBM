@@ -37,7 +37,10 @@ option_list <- list(
 	make_option("--log",       type="double",    default=0,    help=("log transform data - opts: 10 (log10), 1 (ln), 0 (no transform)"),metavar="log"),
 	make_option("--rescale",   type="double",    default=1,    help=("multiply trait"),metavar="rescale"),
 	make_option("--useBMT",    type="integer",   default=1,    help=("set to 0 to remove trend parameter"),metavar="useBMT"),
-	make_option("--constRate", type="integer",   default=0,    help=("set to 0 to remove trend parameter"),metavar="constRate")
+	make_option("--constRate", type="integer",   default=0,    help=("set to 1 to set constant sig2"),metavar="constRate"),
+	make_option("--runBDMCMC", type="integer",   default=1,    help=("set to 0 to run with fixed number of rates/trends"),metavar="BDMCMC"),
+	make_option("--pfile",     type="character", default="",   help=("Partition file for clade-specific analysis"), metavar="pfile")
+	
 	)
 
 parser_object <- OptionParser(usage = "Usage: %prog [Options]", option_list=option_list, description="...")
@@ -67,6 +70,17 @@ remF 		       = opt$options$rmF
 log_trait_data     = opt$options$log
 rescale_trait_data = opt$options$rescale
 dropRandomTaxa     = opt$options$drop_extant
+runbdmcmc          = opt$options$runBDMCMC
+PartitionFile      = opt$options$pfile
+
+
+
+if (runbdmcmc==T){
+	bdmcmc_freq=0.75
+}else{bdmcmc_freq=0}
+
+
+
 if (opt$options$useBMT==1){
 	useBMT=TRUE
 }else{
@@ -246,6 +260,23 @@ calc_prior <- function(sig2, a, y, mu0) {
 	prior_mu0  = sum(dnorm(mu0, mean = 0, sd = 1, log = T))
 	return(prior_sig2+prior_root+prior_anc+prior_mu0)
 }
+
+set_model_partitions <- function(partition_file,ind_sig2,ind_mu0,ntips){
+	tbl = read.table(partition_file,h=F,stringsAsFactors=F)
+	for (i in 1:dim(tbl)[1]){
+		tx = c(tbl[i,1], tbl[i,2])
+		mrca = getMRCA(tree, tx)
+		desc = getDescendants(tree, mrca)
+		desc[desc>ntips] = desc[desc>ntips]-1
+		ind_sig2[desc] = i+1
+		ind_mu0[desc] = i+1
+	}
+	
+	sig2 <- rep(0.2, 1+dim(tbl)[1])
+	mu0  <- rep(0,   1+dim(tbl)[1])
+	return( list(sig2, mu0, ind_sig2, ind_mu0) )
+}
+
 
 ################ BDMCMC SAMPLER
 
@@ -458,10 +489,14 @@ run_BDMCMC <- function(tree, trait_states, sig2, ind_sig, mu0, ind_mu0,D,IND_edg
 }
 
 ################################## START MCMC ###################################
-mcmc.gibbs4 <- function (tree, x, D, prior_tbl,true_rate,ngen = 100000, control = list(),useVCV=F, sample=100,logfile="log",update_sig_freq=0.5,dynamicPlot = F,useFixPart=F,bdmcmc_freq=0.75,useTrend=F,print_freq=100){
+mcmc.gibbs4 <- function (tree, x, D, prior_tbl,true_rate,ngen = 100000, control = list(),useVCV=F, sample=100,
+				logfile="log",update_sig_freq=0.5,dynamicPlot = F,PartitionFile="",
+				bdmcmc_freq=0.75,useTrend=F,print_freq=100){
 	x=data
 	TE=as.matrix(tree$edge)
-	cat(c("it", "posterior","likelihood","prior", "sig2", "mu0", "MAPE","sdAPE","K_sig2","K_mu0", paste("sig2", 1:length(TE[,1]),sep="_"),paste("mu0", 1:length(TE[,1]),sep="_"), paste("anc",D[,1],sep="_"),"\n"),sep="\t", file=logfile, append=F)
+	cat(c("it", "posterior","likelihood","prior", "sig2", "mu0", "MAPE","sdAPE","K_sig2","K_mu0", 
+		paste("sig2", 1:length(TE[,1]),sep="_"),paste("mu0", 1:length(TE[,1]),sep="_"), paste("anc",
+		D[,1],sep="_"),"\n"),sep="\t", file=logfile, append=F)
 	a <- 0
 	y <- rep(0, tree$Nnode - 1)
 	sig2 <- c(0.2)  
@@ -471,6 +506,17 @@ mcmc.gibbs4 <- function (tree, x, D, prior_tbl,true_rate,ngen = 100000, control 
 	mean_sig <- rep(0, length(c(x, y)))
 	mean_anc <- rep(0, length(c(a, y)))
 	if (dynamicPlot == T){dev.new()}
+	
+	if (PartitionFile != ""){
+		bdmcmc_freq = 0
+		res_part <- set_model_partitions(PartitionFile,ind_sig2,ind_mu0,ntips)
+		sig2      <- res_part[[1]]
+		mu0       <- res_part[[2]]
+		ind_sig2  <- res_part[[3]]
+		ind_mu0   <- res_part[[4]]		
+	}
+
+	
 	
 	#names(ind_sig2) = c(names(x), D[-1,1])
 
@@ -1035,8 +1081,8 @@ t1 = get_time()
 logfile3 = sprintf("%s.log", filename)
 
 
-mcmc.gibbs4(tree, data, D, prior_tbl, true_rate=true_sigmas, ngen= nGibbs_gen,bdmcmc_freq=0.75,logfile=logfile3,update_sig_freq=0.5,
-	sample=Gibbs_sample,print_freq=print_f,dynamicPlot=dynamicPlot,useTrend=useBMT) 
+mcmc.gibbs4(tree, data, D, prior_tbl, true_rate=true_sigmas, ngen= nGibbs_gen,bdmcmc_freq=bdmcmc_freq,logfile=logfile3,update_sig_freq=0.5,
+	sample=Gibbs_sample,print_freq=print_f,dynamicPlot=dynamicPlot,useTrend=useBMT, PartitionFile=PartitionFile) 
 cat("\nTime Gibbs:", get_time() - t1, "\n", sep="\t")
 
 
