@@ -12,7 +12,7 @@ The algorithm simultaneously estimates:
 The methods implemented here are described in:
 *Early arrival and climatically-linked geographic expansion of New World monkeys from tiny African ancestors* by D. Silvestro, M. F. Tejedor, et al. ([Systematic Biology, 2018](https://doi.org/10.1093/sysbio/syy046)).
   
-    
+   
 ___
 ### Run the analysis on empirical data
 To run a fossiBM analysis you should provide at least three arguments:   
@@ -40,6 +40,7 @@ flag        |  type     |  default |  help
 --rmF       |  integer  |  0         |  If set to 1 removes all fossil tips from the tree
 --useBMT    |  integer  |  1         |  If set to 0 runs BM model without trend
 --constRate |  integer  |  0         |  If set to 1 runs BMT model with constant rate
+--pfile     |  string   | none       |  Specify partition file for clade-specific rates and trends
 ```  
 
 
@@ -57,9 +58,28 @@ To analyze body mass data we need to log transform the data using the command `-
 
 The results are **plotted automatically** at the end of the run, and the plots are saved in a PDF file. 
 
+#### Running under models with fixed tree partitions ####
+
+You can constrain the analysis to use pre-define partitions, i.e. to estimate independent rates and trends in different clades of the tree. The clades are defined in a text file (see 'clade_partitions.txt' example) which specify two taxa identifying the clade(s) of interest through their most recent common ancestor, e.g.
+
+```
+Alouatta_belzebul	      Stirtonia_victoriae
+Mazzonicebus_almendrae    Cacajao_calvus
+```
+
+The command `--pfile clade_partitions.txt` is then used to enforce these partition. Hence, the command will look like: 
+
+`RScript mcmcFossilBM.R --tfile platyrrhine_FBD.trees --dfile platyrrhine_bodymass.txt --log 10 --wd /path_to_tree_and_data_files --pfile clade_partitions.txt `
 
 
-#### Additional commands for simulations
+
+
+
+
+
+
+---
+### Additional commands for simulations
 The following commands can be used to run analyses on simulated data.
 
 ```
