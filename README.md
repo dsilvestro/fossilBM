@@ -71,7 +71,7 @@ The command `--pfile clade_partitions.txt` is then used to enforce these partiti
 
 `RScript mcmcFossilBM.R --tfile platyrrhine_FBD.trees --dfile platyrrhine_bodymass.txt --log 10 --wd /path_to_tree_and_data_files --pfile clade_partitions.txt `
 
-
+Note that enforcing partitions will automatically switch off the BDMCMC option to estimate the number of rate and trend shifts. 
 
 
 
