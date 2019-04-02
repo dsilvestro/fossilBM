@@ -12,7 +12,8 @@ The algorithm simultaneously estimates:
 The methods implemented here are described in:
 *Early arrival and climatically-linked geographic expansion of New World monkeys from tiny African ancestors* by D. Silvestro, M. F. Tejedor, et al. ([Systematic Biology, 2018](https://doi.org/10.1093/sysbio/syy046)).
   
-   
+The following libraries are required to run FossilBM:
+`optparse`,`scales`,`phytools`,`geiger`,`TreeSim`.
 ___
 ### Run the analysis on empirical data
 To run a fossiBM analysis you should provide at least three arguments:   
