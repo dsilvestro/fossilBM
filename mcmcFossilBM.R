@@ -161,6 +161,21 @@ newlnLike<-function(tree, vector_tip_root_nodes_values, sigma2,D,mu0) {
 	return(L) 
 }
 
+phylo_imputation <-function(tree, vector_tip_root_nodes_values, sigma2,D,mu0,ind_NAtaxa_in_D,anc_of_NAtaxa,brl_NAtaxa_in_D,get_expected=0) {
+	vec_values = vector_tip_root_nodes_values
+	anc_v <- vec_values[anc_of_NAtaxa] # anc value
+	if (get_expected==0){
+		new_val = rnorm(length(brl_NAtaxa_in_D), mean=(anc_v+mu0[ind_NAtaxa_in_D]*brl_NAtaxa_in_D), sd= sqrt(brl_NAtaxa_in_D*sigma2[ind_NAtaxa_in_D]))
+	}else{
+		new_val = anc_v+mu0[ind_NAtaxa_in_D]*brl_NAtaxa_in_D
+	}
+	# print(c("mean", (anc_v+mu0[ind_NAtaxa_in_D]*brl_NAtaxa_in_D), "std",sqrt(brl_NAtaxa_in_D*sigma2[ind_NAtaxa_in_D]),new_val))
+	# print(new_val)
+	return(new_val) 
+}
+
+
+
 build_table <- function (tree,ntips,data){
 	tree.edge.ordered<-tree$edge[order(tree$edge[,2]),]
 	# the root is at ntips+1
@@ -523,13 +538,33 @@ mcmc.gibbs4 <- function (tree, x, D, prior_tbl,true_rate,ngen = 100000, control 
 	x <- x[tree$tip.label]
 	if (is.null(names(y))) {
 		names(y) <- length(tree$tip) + 2:tree$Nnode
-	}
-	else {y[as.character(length(tree$tip) + 2:tree$Nnode)]}
+	}else {y[as.character(length(tree$tip) + 2:tree$Nnode)]}
 
+	# list NA taxa
+	ind_NA_taxa = which(is.na(x))
+	ind_NAtaxa_in_D               = c()
+	brl_NAtaxa_in_D               = c()
+	anc_node_of_NAtaxa            = c()
+	anc_state_anc_node_of_NAtaxa  = c()
+
+
+	for (tax in 1:length(ind_NA_taxa)){
+		ind_NAtaxa_in_D = c(ind_NAtaxa_in_D,   which(D[,2] == ind_NA_taxa[tax]),      which(D[,3] == ind_NA_taxa[tax]))
+		brl_NAtaxa_in_D = c(brl_NAtaxa_in_D, D[which(D[,2] == ind_NA_taxa[tax]),4], D[which(D[,3] == ind_NA_taxa[tax]),5])	
+		anc_node_of_NAtaxa = c(anc_node_of_NAtaxa, D[ind_NAtaxa_in_D[tax],1])
+		anc_state_anc_node_of_NAtaxa = c(anc_state_anc_node_of_NAtaxa, y[which(as.numeric(names(y)) == anc_node_of_NAtaxa[tax])])
+	}
+	
+	# init NAs values
+	# phylo imputation
+	x[ind_NA_taxa]  = NA
+	vector_tip_root_nodes_values = c(x, a, y)
+	x_imputed = phylo_imputation(tree, vector_tip_root_nodes_values, sig2[ind_sig2],D,mu0[ind_mu0],ind_NAtaxa_in_D,anc_node_of_NAtaxa,brl_NAtaxa_in_D,get_expected=1)
+	x[ind_NA_taxa]  = x_imputed
+	
 	L  <- newlnLike(tree, c(x, a, y), sig2[ind_sig2],D,mu0[ind_mu0])
 	Pr <- calc_prior(sig2, a, y,mu0)
-
-
+	
 	# get indexes
 	IND_edge = c()
 	for (ind_edge in tree$edge[,2]){
@@ -553,6 +588,7 @@ mcmc.gibbs4 <- function (tree, x, D, prior_tbl,true_rate,ngen = 100000, control 
 		V = unique(c(i,ind_desc_edges))
 		desc_index_list[[i]] = unique(c(i,ind_desc_edges))
 	}
+
 
 	# START MCMC
 	for (i in 1:ngen) {
@@ -608,7 +644,7 @@ mcmc.gibbs4 <- function (tree, x, D, prior_tbl,true_rate,ngen = 100000, control 
 		
 		update_sig_freq=0.5
 		if (rr[1]<update_sig_freq) {
-			if (rr[2]<0.33){ # SIG2 UPDATE
+			if (rr[2]< 0.33){ # SIG2 UPDATE
 				s_ind  = sample(1:length(sig2),1)
 				sig2_update <-  update_multiplier_proposal(sig2.prime[s_ind],1.2)
 				sig2.prime[s_ind] = sig2_update[1]
@@ -622,6 +658,7 @@ mcmc.gibbs4 <- function (tree, x, D, prior_tbl,true_rate,ngen = 100000, control 
 			else{ # ROOT STATE
 				a.prime <- a + rnorm(n = 1, sd = 0.5) #sqrt(con$prop[j + 1]))
 			}
+			
 		}
 		 else{
 			# ANC STATES
@@ -640,19 +677,36 @@ mcmc.gibbs4 <- function (tree, x, D, prior_tbl,true_rate,ngen = 100000, control 
 				#print (ind_mu0)
 				gibbs=1
 			} else {
-			
-			vector_tip_root_nodes_values = c(x, a.prime, y.prime)
-			y_temp = runGibbs(sig2.prime[ind_sig2], vector_tip_root_nodes_values,D,prior_tbl,mu0.prime[ind_mu0],get_expected=0)
-			a.prime= y_temp[1]
-			y.prime= y_temp[-1]
-			gibbs=1
+				
+				if (runif(1)<0.1){
+					# phylo imputation
+					x[ind_NA_taxa]  = NA
+					vector_tip_root_nodes_values = c(x, a.prime, y.prime)
+					x_imputed = phylo_imputation(tree, vector_tip_root_nodes_values, sig2.prime[ind_sig2],D,mu0.prime[ind_mu0],ind_NAtaxa_in_D,anc_node_of_NAtaxa,brl_NAtaxa_in_D,get_expected=0)
+					x[ind_NA_taxa]  = x_imputed
+					gibbs=1
+				}else{
+					# gibbs update anc states
+					vector_tip_root_nodes_values = c(x, a.prime, y.prime)
+					y_temp = runGibbs(sig2.prime[ind_sig2], vector_tip_root_nodes_values,D,prior_tbl,mu0.prime[ind_mu0],get_expected=0)
+					a.prime= y_temp[1]
+					y.prime= y_temp[-1]
+					gibbs=1					
+				}
+				
 			}
 		}
-
+		
+		
+		
+		
 	       # calc post
 		L.prime <- newlnLike(tree, c(x, a.prime, y.prime), sig2.prime[ind_sig2],D,mu0.prime[ind_mu0])	
 		Pr.prime <- calc_prior(sig2.prime, a.prime, y.prime, mu0.prime)
-	
+		
+		#print( c(sum(L.prime), sum(Pr.prime), sig2.prime, a.prime, mu0.prime, x[ind_NA_taxa], sum(Pr), sum(L)) )
+		
+		
 		if ( (sum(Pr.prime) + sum(L.prime) - sum(Pr) - sum(L) + hastings) >= log(runif(1,0,1)) || gibbs==1){    
 			y    = y.prime
 			L    = L.prime
@@ -668,6 +722,7 @@ mcmc.gibbs4 <- function (tree, x, D, prior_tbl,true_rate,ngen = 100000, control 
 			MAPE = mean(abs((rates_temp[IND_edge]-true_rate))/true_rate)
 			sdAPE =  sd(abs((rates_temp[IND_edge]-true_rate))/true_rate)
 			cat(c(i,sum(L)+sum(Pr), sum(L),sum(Pr), mean(sig2[ind_sig2]),mean(mu0[ind_mu0]), MAPE, sdAPE, length(sig2),length(mu0), rates_temp[IND_edge],trends_temp[IND_edge], a, y, "\n"),sep="\t", file=logfile, append=T) 
+			#print(x[ind_NA_taxa])
 	    }
     
 }
