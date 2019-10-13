@@ -310,6 +310,10 @@ random_choice_P <-function(vector){
 
 calc_deathRates <- function (tree, trait_states, sig2, ind_sig, mu0, ind_mu0,D,IND_edge,desc_index_list,death_sig2=1){
 	list_deathrates=c(0) # can't kill first
+	y_temp = runGibbs(sig2[ind_sig], trait_states,D,prior_tbl,mu0[ind_mu0],get_expected=1)
+	a= y_temp[1]
+	y= y_temp[-1]
+	trait_states = c(trait_states[1:length(tree$tip.label)], a, y)
 	current_lik = sum(newlnLike(tree, trait_states, sig2[ind_sig],D,mu0[ind_mu0]))
 	if (death_sig2==1){
 		N=length(unique(ind_sig))
@@ -342,10 +346,14 @@ calc_deathRates <- function (tree, trait_states, sig2, ind_sig, mu0, ind_mu0,D,I
 			rates_temp= sig2[ind_sig]
 			mu0_temp = mu0[new_ind_mu0]
 		}
-		
-		list_deathrates[i] = sum(newlnLike(tree, trait_states, rates_temp,D,mu0_temp))
+		y_temp = runGibbs(rates_temp, trait_states,D,prior_tbl,mu0_temp,get_expected=1)
+		a= y_temp[1]
+		y= y_temp[-1]
+		trait_states_temp = c(trait_states[1:length(tree$tip.label)], a, y)
+		list_deathrates[i] = sum(newlnLike(tree, trait_states_temp, rates_temp,D,mu0_temp))
 	}
 	list_deathrates = exp(list_deathrates - current_lik)	
+	#print(c(current_lik, list_deathrates))
 	list_deathrates[1] = 0
 	return(list_deathrates)
 }
