@@ -12,8 +12,12 @@ The algorithm simultaneously estimates:
 The methods implemented here are described in:
 *Early arrival and climatically-linked geographic expansion of New World monkeys from tiny African ancestors* by D. Silvestro, M. F. Tejedor, et al. ([Systematic Biology, 2018](https://doi.org/10.1093/sysbio/syy046)).
   
-The following libraries are required to run FossilBM:
-`optparse`,`scales`,`phytools`,`geiger`,`TreeSim`.
+The following libraries are required to run FossilBM (`mcmcFossilBM.R`): `scales`,`phytools`,`geiger`,`TreeSim`.
+
+#### NOTE
+Two versions of the same fossilBM model are available: one requires the additionaly R library `optparse` and is launched from a terminal window using `RScript mcmcFossilBM.R [additional commands]`. The other one loads all the necessary functions from the file `fossilBM_lib.R` and can be run more interactively from an R console. 
+
+
 ___
 ### Run the analysis on empirical data
 To run a fossiBM analysis you should provide at least three arguments:   
@@ -22,7 +26,10 @@ To run a fossiBM analysis you should provide at least three arguments:
 2) a simple text file including taxa names and trait values as two tab-separated columns  
 3) working directory (where the input files are and where the output files will be saved).  
 
-To run an analysis run in a Terminal:
+To run an analysis within an interactive R console please follow the steps in this [script: `run_FBM.R`](https://github.com/dsilvestro/fossilBM/blob/master/run_FBM.R).
+
+
+To run an analysis run in a Terminal window:
  `RScript mcmcFossilBM.R --wd /path_to_files --tfile tree_file --dfile trait_file`
 
 
