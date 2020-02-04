@@ -48,12 +48,13 @@ read_and_transform_data <- function(treefile, datafile, rm_extinct=FALSE,
 		names(data)<- rownames(data_dataframe)
 		fbm_obj$data <- data
 
-		fbm_obj$ntips=tree$Nnode+1
+		fbm_obj$ntips <- tree$Nnode+1
 		fbm_obj$D <- build_table(tree, fbm_obj$ntips,fbm_obj$data)
 		BR <- branching.times(tree) # sorted from root to most recent
-		fbm_obj$dist_from_root = max(BR)-BR
-		fbm_obj$prior_tbl = get_calibration_tbl(fbm_obj$D,root_calibration)
+		fbm_obj$dist_from_root <- max(BR)-BR
+		fbm_obj$prior_tbl <- get_calibration_tbl(fbm_obj$D,root_calibration)
 		fbm_obj$PartitionFile <- partition_file
+		fbm_obj$trait_rescaling <- rescale_trait_data
 		
 		return(fbm_obj)	
 }
@@ -884,7 +885,7 @@ return(rr$par)
 
 
 
-plot_results <- function(fLOG, resfile="results.pdf" , exp_trait_data=0, rescale_trait_data=1){	
+plot_results <- function(fLOG, resfile="results.pdf" , exp_trait_data=0){	
 	require(phytools)
 	require(methods)
 	library(scales)
@@ -898,6 +899,7 @@ plot_results <- function(fLOG, resfile="results.pdf" , exp_trait_data=0, rescale
 	tree <- fbm_obj$tree
 	ntips <- fbm_obj$ntips
 	data <- fbm_obj$data
+	rescale_trait_data <- fbm_obj$trait_rescaling
 	
 	
 	# Rates section
