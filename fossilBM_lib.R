@@ -225,9 +225,10 @@ calc_prior <- function(sig2, a, y, mu0, prior_tbl) {
 }
 
 set_model_partitions <- function(fbm_obj,ind_sig2,ind_mu0){
-	tbl = read.table(fbm_obj$PartitionFile,h=F,stringsAsFactors=F)
+	tbl = read.table(fbm_obj$PartitionFile,h=F,stringsAsFactors=F,fill=T)
 	for (i in 1:dim(tbl)[1]){
-		tx = c(tbl[i,1], tbl[i,2])
+		tx_tmp = as.vector(unlist(tbl[i,]))
+		tx = tx_tmp[tx_tmp != ""]
 		mrca = getMRCA(fbm_obj$tree, tx)
 		desc = getDescendants(fbm_obj$tree, mrca)
 		desc[desc>fbm_obj$ntips] = desc[desc>fbm_obj$ntips]-1
@@ -496,9 +497,6 @@ run_mcmc <- function (fbm_obj,ngen = 100000, control = list(),useVCV=F, sample=2
 	PartitionFile <- fbm_obj$PartitionFile
 	
 	TE=as.matrix(tree$edge)
-	cat(c("it", "posterior","likelihood","prior", "sig2", "mu0","K_sig2","K_mu0", 
-		paste("sig2", 1:length(TE[,1]),sep="_"),paste("mu0", 1:length(TE[,1]),sep="_"), paste("anc",
-		D[,1],sep="_"),"\n"),sep="\t", file=logfile, append=F)
 	a <- 0
 	y <- rep(0, tree$Nnode - 1)
 	sig2 <- c(0.2)  
@@ -534,7 +532,10 @@ run_mcmc <- function (fbm_obj,ngen = 100000, control = list(),useVCV=F, sample=2
 	anc_node_of_NAtaxa            = c()
 	anc_state_anc_node_of_NAtaxa  = c()
 
-
+	cat(c("it", "posterior","likelihood","prior", "sig2", "mu0","K_sig2","K_mu0", 
+		paste("sig2", 1:length(TE[,1]),sep="_"),paste("mu0", 1:length(TE[,1]),sep="_"), paste("anc",
+		D[,1],sep="_"), tree$tip.label[ind_NA_taxa],"\n"),sep="\t", file=logfile, append=F)
+	
 	for (tax in 1:length(ind_NA_taxa)){
 		ind_NAtaxa_in_D = c(ind_NAtaxa_in_D,   which(D[,2] == ind_NA_taxa[tax]),      which(D[,3] == ind_NA_taxa[tax]))
 		brl_NAtaxa_in_D = c(brl_NAtaxa_in_D, D[which(D[,2] == ind_NA_taxa[tax]),4], D[which(D[,3] == ind_NA_taxa[tax]),5])	
@@ -699,7 +700,8 @@ run_mcmc <- function (fbm_obj,ngen = 100000, control = list(),useVCV=F, sample=2
 	     if (i%%sample == 0) {
 			rates_temp=sig2[ind_sig2]
 			trends_temp=mu0[ind_mu0]
-			cat(c(i,sum(L)+sum(Pr), sum(L),sum(Pr), mean(sig2[ind_sig2]),mean(mu0[ind_mu0]), length(sig2),length(mu0), rates_temp[IND_edge],trends_temp[IND_edge], a, y, "\n"),sep="\t", file=logfile, append=T) 
+			cat(c(i,sum(L)+sum(Pr), sum(L),sum(Pr), mean(sig2[ind_sig2]),mean(mu0[ind_mu0]), length(sig2),length(mu0), 
+				rates_temp[IND_edge],trends_temp[IND_edge], a, y, x_imputed, "\n"),sep="\t", file=logfile, append=T) 
 			#print(x[ind_NA_taxa])
 	    }
     
@@ -1012,6 +1014,7 @@ plot_results <- function(fLOG, resfile="results.pdf" , exp_trait_data=0){
 	# mean values phenogram 
 
 	color=adjustcolor( "darkred", alpha.f = 1)
+	est_anc_states_mean_raw[is.na(est_anc_states_mean_raw)] = mean(est_anc_states_mean_raw, na.rm=T)
 	phenogram_invTime(tree, est_anc_states_mean_raw, col=color, main="Traigram", spread.labels=F)
  
 	# mcmc sample of phenograms
@@ -1020,6 +1023,7 @@ plot_results <- function(fLOG, resfile="results.pdf" , exp_trait_data=0){
 
 	color=adjustcolor( "darkred", alpha.f = alphacol)
 	temp = c(data_raw, sample_mcmc_raw[1,])	
+	temp[is.na(temp)] = mean(temp, na.rm=T)
 	phenogram_invTime(tree, temp, col=color, main="Traigram", spread.labels=F, ftype="off", 
 			ylim=c(min(c(sample_mcmc_raw,temp)), max(c(sample_mcmc_raw,temp))))
 
