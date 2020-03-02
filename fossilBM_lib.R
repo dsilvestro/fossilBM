@@ -887,7 +887,7 @@ return(rr$par)
 
 
 
-plot_results <- function(fLOG, resfile="results.pdf" , exp_trait_data=0){	
+plot_results <- function(fbm_obj, fLOG, resfile="results.pdf" , exp_trait_data=0){	
 	require(phytools)
 	require(methods)
 	library(scales)
