@@ -904,6 +904,10 @@ plot_results <- function(fLOG, resfile="results.pdf" , exp_trait_data=0){
 	rescale_trait_data <- fbm_obj$trait_rescaling
 	
 	
+	sp_with_missing_data = names(data[which(is.na(data))])
+	phylo_imputation_data <- out_tbl[sp_with_missing_data]
+	data[which(is.na(data))] = apply(phylo_imputation_data,FUN=mean,2)
+	
 	# Rates section
 
 	rates_temp_median = apply(out_tbl[burnin:dim(out_tbl)[1], ind_sig2_col],FUN=median,2)
@@ -987,30 +991,42 @@ plot_results <- function(fLOG, resfile="results.pdf" , exp_trait_data=0){
 
 	use_mcmc <- out_tbl[burnin:dim(out_tbl)[1], ind_anc_col]
 	sample_size <- min(100, dim(use_mcmc)[1])
-	sample_mcmc <- use_mcmc [ sample(1:dim(use_mcmc)[1], size=sample_size, replace = FALSE) , ]
+	sampled_indx = sample(1:dim(use_mcmc)[1], size=sample_size, replace = FALSE)
+	
+	sample_mcmc <- use_mcmc [ sampled_indx , ]
 	colnames(sample_mcmc) = seq(from=ntips+1, to=max(tree$edge[,2]), by=1)
 	sample_mcmc <- as.matrix(sample_mcmc)
+	sample_phylo_imputation_data <- phylo_imputation_data[sampled_indx,]
+	
 
 	# Coming back to the original values of the trait, and applying the same transform/scaling used for MCMC
 	if(exp_trait_data == 0) {
 	   sample_mcmc_raw <- sample_mcmc
 	   est_anc_states_mean <- est_anc_states
 	   data_raw <- data
+	   sample_phylo_imputation_data_raw <- sample_phylo_imputation_data
 	  	}
 	if(exp_trait_data == 1){ 
 	  sample_mcmc_raw <- exp(sample_mcmc)	 
 	  est_anc_states_mean <- exp(est_anc_states)
 	  data_raw <- exp(data)	
+	  sample_phylo_imputation_data_raw <- exp(sample_phylo_imputation_data)
 	   }
 	if(exp_trait_data == 10){
 	  sample_mcmc_raw <- 10^sample_mcmc
 	  est_anc_states_mean <- 10^est_anc_states
 	  data_raw <- 10^data	
+	  sample_phylo_imputation_data_raw <- 10^sample_phylo_imputation_data
     	}		
+	
+	
+	
+	
 	
 	sample_mcmc_raw = sample_mcmc_raw/rescale_trait_data
 	est_anc_states_mean_raw <- est_anc_states_mean/rescale_trait_data
  	data_raw <- data_raw/rescale_trait_data
+	sample_phylo_imputation_data_raw <- sample_phylo_imputation_data_raw/rescale_trait_data
 	# mean values phenogram 
 
 	color=adjustcolor( "darkred", alpha.f = 1)
@@ -1026,9 +1042,12 @@ plot_results <- function(fLOG, resfile="results.pdf" , exp_trait_data=0){
 	temp[is.na(temp)] = mean(temp, na.rm=T)
 	phenogram_invTime(tree, temp, col=color, main="Traigram", spread.labels=F, ftype="off", 
 			ylim=c(min(c(sample_mcmc_raw,temp)), max(c(sample_mcmc_raw,temp))))
-
+	
 	for (s in 2:dim(sample_mcmc)[1]) { 
-		temp = c(data, sample_mcmc_raw[s,])	
+		data_tmp <- data_raw
+		data_tmp[which(is.na(fbm_obj$data))] <- as.numeric(sample_phylo_imputation_data_raw[sampled_indx[s], ])
+		
+		temp = c(data_tmp, sample_mcmc_raw[s,])	
 		phenogram_invTime(tree, temp, col=color, main="Traigram", spread.labels=F, ftype="off", add=T)
 	}
 
