@@ -219,9 +219,8 @@ runGibbs <- function(fbm_obj,sigma2, vector_tip_root_nodes_values,mu0,get_expect
 calc_prior <- function(sig2, a, y, mu0, prior_tbl) {
 	prior_sig2 = sum(dexp(sig2, 0.5, log = TRUE) ) #sum(dgamma(sig2, 2,1, log = TRUE) )
 	prior_root = sum(dnorm(c(a), mean = prior_tbl[,1], sd = prior_tbl[,2], log = T))
-	prior_anc  = sum(dnorm(c(a, y), mean = 0, sd = 100, log = T))
 	prior_mu0  = sum(dnorm(mu0, mean = 0, sd = 1, log = T))
-	return(prior_sig2+prior_root+prior_anc+prior_mu0)
+	return(prior_sig2+prior_root+prior_mu0)
 }
 
 set_model_partitions <- function(fbm_obj,ind_sig2,ind_mu0){
