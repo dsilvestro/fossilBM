@@ -7,7 +7,7 @@ library(adephylo)
 
 
 read_and_transform_data <- function(treefile, datafile, rm_extinct=FALSE, 
-	log_trait_data=0, rescale_trait_data=1,root_calibration=c(0,100),partition_file=""){
+	log_trait_data=0, rescale_trait_data=1,root_calibration=c(0,100),partition_file="", tindex=1){
 	
 		t<- read.nexus(treefile)
 		if (class(t)=="phylo") { 
