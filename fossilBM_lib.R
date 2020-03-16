@@ -2,6 +2,7 @@ library(scales)
 require(phytools)
 library(geiger)
 library(TreeSim)
+library(adephylo)
 
 
 
@@ -51,7 +52,7 @@ read_and_transform_data <- function(treefile, datafile, rm_extinct=FALSE,
 		fbm_obj$ntips <- tree$Nnode+1
 		fbm_obj$D <- build_table(tree, fbm_obj$ntips,fbm_obj$data)
 		BR <- branching.times(tree) # sorted from root to most recent
-		fbm_obj$dist_from_root <- max(BR)-BR
+		fbm_obj$dist_from_root <- c(distRoot(fbm_obj$tree,tips="all",method =c( "patristic")), max(BR)-BR)
 		fbm_obj$prior_tbl <- get_calibration_tbl(fbm_obj$D,root_calibration)
 		fbm_obj$PartitionFile <- partition_file
 		fbm_obj$trait_rescaling <- rescale_trait_data
@@ -85,7 +86,30 @@ fN2<-function(xa, xb, vpa, vpb, sigma2_a,sigma2_b, anc) {
 	return(dnorm(xa, mean=anc, sd= sqrt(vpa*sigma2_a),log=T) + dnorm(xb, mean=anc, sd= sqrt(vpb*sigma2_b),log=T)  )
 }
 
-newlnLike<-function(fbm_obj, vector_tip_root_nodes_values, sigma2,mu0) {
+newlnLike <- function(fbm_obj, vector_tip_root_nodes_values, sigma2,mu0, a0) {
+	tree <- fbm_obj$tree
+	ntips <- fbm_obj$ntips
+	D <- fbm_obj$D
+	root_dist <- as.numeric(fbm_obj$dist_from_root)
+	names(root_dist) <- names(vector_tip_root_nodes_values)
+	vec_values = vector_tip_root_nodes_values
+	anc_ind_v <- D[,1]
+	a_ind_v   <- D[,2]
+	b_ind_v   <- D[,3]
+	vpa_v     <- D[,4]
+	vpb_v     <- D[,5]
+	anc_v <- vec_values[anc_ind_v]
+	a_v   <- vec_values[a_ind_v]
+	b_v   <- vec_values[b_ind_v]
+	a_ind_v[a_ind_v>ntips] =a_ind_v[a_ind_v>ntips]-1
+	b_ind_v[b_ind_v>ntips] =b_ind_v[b_ind_v>ntips]-1
+	L1 = dnorm(a_v, mean=(anc_v+mu0[a_ind_v]*vpa_v + a0[a_ind_v]*vpa_v*root_dist[a_ind_v]), sd= sqrt(vpa_v*sigma2[a_ind_v]),log=T)
+	L2 = dnorm(b_v, mean=(anc_v+mu0[b_ind_v]*vpb_v + a0[b_ind_v]*vpb_v*root_dist[b_ind_v]), sd= sqrt(vpb_v*sigma2[b_ind_v]),log=T)  
+	L = L1+L2
+	return(L) 
+}
+
+newlnLike_old<-function(fbm_obj, vector_tip_root_nodes_values, sigma2,mu0, null) {
 	tree <- fbm_obj$tree
 	ntips <- fbm_obj$ntips
 	D <- fbm_obj$D
@@ -106,13 +130,13 @@ newlnLike<-function(fbm_obj, vector_tip_root_nodes_values, sigma2,mu0) {
 	return(L) 
 }
 
-phylo_imputation <-function(tree, vector_tip_root_nodes_values, sigma2,D,mu0,ind_NAtaxa_in_D,anc_of_NAtaxa,brl_NAtaxa_in_D,get_expected=0) {
+phylo_imputation <-function(tree, vector_tip_root_nodes_values, sigma2,D,mu0,a0,ind_NAtaxa_in_D,anc_of_NAtaxa,brl_NAtaxa_in_D,root_dist,get_expected=0) {
 	vec_values = vector_tip_root_nodes_values
 	anc_v <- vec_values[anc_of_NAtaxa] # anc value
 	if (get_expected==0){
 		new_val = rnorm(length(brl_NAtaxa_in_D), mean=(anc_v+mu0[ind_NAtaxa_in_D]*brl_NAtaxa_in_D), sd= sqrt(brl_NAtaxa_in_D*sigma2[ind_NAtaxa_in_D]))
 	}else{
-		new_val = anc_v+mu0[ind_NAtaxa_in_D]*brl_NAtaxa_in_D
+		new_val = anc_v + mu0[ind_NAtaxa_in_D]*brl_NAtaxa_in_D + a0[ind_NAtaxa_in_D]*root_dist[ind_NAtaxa_in_D]*brl_NAtaxa_in_D
 	}
 	# print(c("mean", (anc_v+mu0[ind_NAtaxa_in_D]*brl_NAtaxa_in_D), "std",sqrt(brl_NAtaxa_in_D*sigma2[ind_NAtaxa_in_D]),new_val))
 	# print(new_val)
@@ -156,11 +180,17 @@ get_joint_mu_s2 <- function (mu_f,s2_f,mu_g,s2_g){
 	return(c(mu_fg,s2_fg))
 }
 
-runGibbs <- function(fbm_obj,sigma2, vector_tip_root_nodes_values,mu0,get_expected=0) {
+get_mu_t <- function(t, x, mu0, b, a0=0){
+	return( a0*t*x + mu0*x +b )
+}
+
+
+runGibbs <- function(fbm_obj,sigma2, vector_tip_root_nodes_values,mu0, a0,get_expected=0) {
 	ntips      <- fbm_obj$ntips
 	D          <- fbm_obj$D
 	prior_tbl  <- fbm_obj$prior_tbl
 	#prior_tbl = calc_prior_dist_root_calibration(D,sigma2)
+	root_dist <- fbm_obj$dist_from_root
 	
 	vec_values = vector_tip_root_nodes_values
         # loop over Johnatan's tbl from most recent to root
@@ -185,7 +215,14 @@ runGibbs <- function(fbm_obj,sigma2, vector_tip_root_nodes_values,mu0,get_expect
 			sig_b_ind=b_ind-1
 		}else{sig_b_ind=b_ind}
 
-		desc_lik = get_joint_mu_s2((a-vpa*mu0[sig_a_ind]), (vpa)*sigma2[sig_a_ind], (b-vpb*mu0[sig_b_ind]), (vpb)*sigma2[sig_b_ind])
+		#desc_lik = get_joint_mu_s2((a-vpa*mu0[sig_a_ind]), (vpa)*sigma2[sig_a_ind], (b-vpb*mu0[sig_b_ind]), (vpb)*sigma2[sig_b_ind])
+		
+		m1 <- a - (vpa*mu0[sig_a_ind] + a0[sig_a_ind]*vpa*root_dist[a_ind])
+		s1 <- (vpa)*sigma2[sig_a_ind]
+		m2 <- b - (vpb*mu0[sig_b_ind] + a0[sig_b_ind]*vpb*root_dist[b_ind])
+		s2 <- (vpb)*sigma2[sig_b_ind]
+		
+		desc_lik = get_joint_mu_s2(m1, s1, m2,  s2)
 		prior_prm = prior_tbl[which(rownames(prior_tbl)==anc_ind),]
 		
 		# lik from (stem) ancestral state
@@ -200,12 +237,14 @@ runGibbs <- function(fbm_obj,sigma2, vector_tip_root_nodes_values,mu0,get_expect
 			}
 			
 			sig_stem_ind=stem_ind-1
-			stem_val = vec_values[stem_ind]		
-			stem_lik = c((stem_val + stem_brl*mu0[sig_stem_ind]) , (stem_brl)*sigma2[sig_stem_ind])
+			stem_val = vec_values[stem_ind]
 			
-			lik_val = get_joint_mu_s2(stem_lik[1],stem_lik[2],desc_lik[1],desc_lik[2])
+			stem_lik_m1 <- stem_val + stem_brl*mu0[sig_stem_ind] + a0[sig_stem_ind]*stem_brl*root_dist[anc_ind]
+			stem_lik_s1 <- stem_brl * sigma2[sig_stem_ind]
+			
+			lik_val = get_joint_mu_s2(stem_lik_m1,stem_lik_s1,desc_lik[1],desc_lik[2])
 
-			post_prm= get_joint_mu_s2(lik_val[1],lik_val[2],prior_prm[1], prior_prm[2])
+			post_prm= lik_val #get_joint_mu_s2(lik_val[1],lik_val[2],prior_prm[1], prior_prm[2])
 			if (get_expected==1){
 				vec_values[anc_ind] = post_prm[1]
 			}else{
@@ -237,7 +276,8 @@ set_model_partitions <- function(fbm_obj,ind_sig2,ind_mu0){
 	
 	sig2 <- rep(0.2, 1+dim(tbl)[1])
 	mu0  <- rep(0,   1+dim(tbl)[1])
-	return( list(sig2, mu0, ind_sig2, ind_mu0) )
+	a0  <-  rep(0,   1+dim(tbl)[1])
+	return( list(sig2, mu0, a0, ind_sig2, ind_mu0) )
 }
 
 
@@ -256,17 +296,17 @@ random_choice_P <-function(vector){
 	return (c(vector[ind], ind))
 }
 
-calc_deathRates <- function (fbm_obj, trait_states, sig2, ind_sig, mu0, ind_mu0,IND_edge,desc_index_list,death_sig2=1){
+calc_deathRates <- function (fbm_obj, trait_states, sig2, ind_sig, mu0, ind_mu0, a0,IND_edge,desc_index_list,death_sig2=1){
 	tree <- fbm_obj$tree
 	D <- fbm_obj$D
 	ntips <- fbm_obj$ntips
 	list_deathrates=c(0) # can't kill first
-	y_temp = runGibbs(fbm_obj,sig2[ind_sig], trait_states,mu0[ind_mu0],get_expected=1)
+	y_temp = runGibbs(fbm_obj,sig2[ind_sig], trait_states,mu0[ind_mu0],a0[ind_mu0],get_expected=1)
 	y_temp_FIRST = y_temp
 	a= y_temp[1]
 	y= y_temp[-1]
 	trait_states_ = c(trait_states[1:length(tree$tip.label)], a, y)
-	current_lik = sum(newlnLike(fbm_obj, trait_states_, sig2[ind_sig],mu0[ind_mu0]))
+	current_lik = sum(newlnLike(fbm_obj, trait_states_, sig2[ind_sig],mu0[ind_mu0],a0[ind_mu0]))
 	if (death_sig2==1){
 		N=length(unique(ind_sig))
 	}else{N=length(unique(ind_mu0))}
@@ -292,30 +332,19 @@ calc_deathRates <- function (fbm_obj, trait_states, sig2, ind_sig, mu0, ind_mu0,
 			new_ind_sig[new_ind_sig==i] = ind_of_ancestor		
 			rates_temp= sig2[new_ind_sig]
 			mu0_temp = mu0[ind_mu0]
+			a0_temp = a0[ind_mu0]
 		}else{
 			new_ind_mu0 = ind_mu0
 			new_ind_mu0[new_ind_mu0==i] = ind_of_ancestor		
 			rates_temp= sig2[ind_sig]
 			mu0_temp = mu0[new_ind_mu0]
+			a0_temp = a0[new_ind_mu0]
 		}
-		y_temp = runGibbs(fbm_obj,rates_temp, trait_states,mu0_temp,get_expected=1)
+		y_temp = runGibbs(fbm_obj,rates_temp, trait_states,mu0_temp,a0_temp,get_expected=1)
 		a= y_temp[1]
 		y= y_temp[-1]
 		trait_states_temp = c(trait_states[1:length(tree$tip.label)], a, y)
-		list_deathrates[i] = sum(newlnLike(fbm_obj, trait_states_temp, rates_temp,mu0_temp))
-		#print(newlnLike(fbm_obj, trait_states_temp, rates_temp,mu0_temp)- newlnLike(fbm_obj, trait_states, sig2[ind_sig],mu0[ind_mu0]) )
-		# print(c("rates_temp", rates_temp-sig2[ind_sig]))
-		# print(sig2)
-		# #print(trait_states_temp-trait_states)
-		# #print(c("mu0_temp", mu0_temp-mu0[ind_mu0]))
-		# print(c("list_deathrates",list_deathrates[i], current_lik))
-		# y_temp_FIRST = runGibbs(fbm_obj,sig2[ind_sig], trait_states,mu0[ind_mu0],get_expected=1)
-		# y_temp1 = runGibbs(fbm_obj,rates_temp, trait_states,mu0_temp,get_expected=1)
-		# print(y_temp- y_temp1)
-		# a= y_temp[1]
-		# y= y_temp[-1]
-		
-		# print(sum(newlnLike(fbm_obj, trait_states_temp, rates_temp,mu0_temp)) - current_lik)
+		list_deathrates[i] = sum(newlnLike(fbm_obj, trait_states_temp, rates_temp,mu0_temp,a0_temp))
 		
 	}
 	list_deathrates = exp(list_deathrates - current_lik)	
@@ -324,12 +353,12 @@ calc_deathRates <- function (fbm_obj, trait_states, sig2, ind_sig, mu0, ind_mu0,
 	return(list_deathrates)
 }
 
-run_BDMCMC <- function(fbm_obj, trait_states, sig2, ind_sig, mu0, ind_mu0,IND_edge,new_ind,desc_index_list,death_sig2=1){
+run_BDMCMC <- function(fbm_obj, trait_states, sig2, ind_sig, mu0, ind_mu0, a0 ,IND_edge,new_ind,desc_index_list,death_sig2=1){
 	tree <- fbm_obj$tree
 	D    <- fbm_obj$D
 	ntips <- fbm_obj$ntips
 	
-	init_lik = sum(newlnLike(fbm_obj, trait_states, sig2[ind_sig],mu0[ind_mu0]))
+	init_lik = sum(newlnLike(fbm_obj, trait_states, sig2[ind_sig],mu0[ind_mu0],a0[ind_mu0]))
 	cont_time=0
 	len_cont_time=1
 	birthRate=1
@@ -345,9 +374,9 @@ run_BDMCMC <- function(fbm_obj, trait_states, sig2, ind_sig, mu0, ind_mu0,IND_ed
 		}
 		
 		if (length(unique(ind_sig))>1 && death_sig2==1){
-				deathRate = calc_deathRates(fbm_obj, trait_states, sig2, ind_sig, mu0, ind_mu0,IND_edge,desc_index_list,1)
+				deathRate = calc_deathRates(fbm_obj, trait_states, sig2, ind_sig, mu0, ind_mu0,a0, IND_edge,desc_index_list,1)
 		}else if (length(unique(ind_mu0))>1 && death_sig2==2){
-				deathRate = calc_deathRates(fbm_obj, trait_states, sig2, ind_sig, mu0, ind_mu0,IND_edge,desc_index_list,2)
+				deathRate = calc_deathRates(fbm_obj, trait_states, sig2, ind_sig, mu0, ind_mu0,a0, IND_edge,desc_index_list,2)
 		}
 		
 		deltaRate=sum(deathRate)
@@ -413,7 +442,9 @@ run_BDMCMC <- function(fbm_obj, trait_states, sig2, ind_sig, mu0, ind_mu0,IND_ed
 						# BDMCMC PROPOSAL
 						mu0_original  =  mu0
 						ind_mu0_original  = ind_mu0
+						a0_original = a0
 						mu0=c(mu0,rnorm(1,0,1)) # sample from rate prior
+						a0 =c(a0,rnorm(1,0,0.01))
 						# ind_sig in the original order
 						ind_mu0=multi_ind_new[new_ind]
 						if (length(mu0)>length(unique(ind_mu0))){
@@ -421,6 +452,7 @@ run_BDMCMC <- function(fbm_obj, trait_states, sig2, ind_sig, mu0, ind_mu0,IND_ed
 							# remove unused mu0
 						 	mu0= mu0_original
 							ind_mu0= ind_mu0_original
+							a0 = a0_original
 						}
 					} 
 					
@@ -469,7 +501,8 @@ run_BDMCMC <- function(fbm_obj, trait_states, sig2, ind_sig, mu0, ind_mu0,IND_ed
 						new_ind_mu0[new_ind_mu0==i] = ind_sig_of_ancestor_i
 						ind_mu0 = new_ind_mu0		
 						# remove unused sig2
-						mu0 = mu0[-i]				
+						mu0 = mu0[-i]
+						a0 = a0[-i]				
 						# rescale indexes
 						ind_mu0[ind_mu0>i]=ind_mu0[ind_mu0>i]-1					
 					}
@@ -480,13 +513,13 @@ run_BDMCMC <- function(fbm_obj, trait_states, sig2, ind_sig, mu0, ind_mu0,IND_ed
 		
 	}
 	#__ print(list(sig2,ind_sig))	
-	return (list(sig2,ind_sig,mu0,ind_mu0))
+	return (list(sig2,ind_sig,mu0,a0,ind_mu0))
 }
 
 ################################## START MCMC ###################################
-run_mcmc <- function (fbm_obj,ngen = 100000, control = list(),useVCV=F, sample=250,
+run_mcmc <- function (fbm_obj,ngen = 100000, control = list(),useVCV=F, sample_f=250,
 	                logfile="mcmc.log",update_sig_freq=0.5,dynamicPlot = F,
-	                bdmcmc_freq=0.75,useTrend=T,print_freq=100,constRate=F){
+	                bdmcmc_freq=0.75,useTrend=T,print_freq=100,constRate=F,linTrend=F){
 					
 	tree <-      fbm_obj$tree
 	x <-         fbm_obj$data
@@ -499,11 +532,27 @@ run_mcmc <- function (fbm_obj,ngen = 100000, control = list(),useVCV=F, sample=2
 	a <- 0
 	y <- rep(0, tree$Nnode - 1)
 	sig2 <- c(0.2)  
-	mu0 <- 0
+	mu0 <- c(0)
+	a0 <- c(0)
 	ind_sig2 <- rep(1, length(c(x, y)))
 	ind_mu0  <- rep(1, length(c(x, y)))
 	mean_sig <- rep(0, length(c(x, y)))
 	mean_anc <- rep(0, length(c(a, y)))
+	#y = runGibbs(fbm_obj,sig2[ind_sig2], c(x, a, y),mu0[ind_mu0],a0[ind_mu0],get_expected=1)
+	
+	#_ ngen = 2000
+	#_ control = list()
+	#_ useVCV=F
+	#_ sample_f=250
+	#_ logfile="mcmc.log"
+	#_ update_sig_freq=0.5
+	#_ dynamicPlot = F
+	#_ bdmcmc_freq=0.8
+	#_ useTrend=T
+	#_ print_freq=100
+	#_ constRate=F
+	#_ linTrend=F
+	
 	if (dynamicPlot == T){dev.new()}
 	
 	if (PartitionFile != ""){
@@ -511,12 +560,11 @@ run_mcmc <- function (fbm_obj,ngen = 100000, control = list(),useVCV=F, sample=2
 		res_part <- set_model_partitions(fbm_obj,ind_sig2,ind_mu0)
 		sig2      <- res_part[[1]]
 		mu0       <- res_part[[2]]
-		ind_sig2  <- res_part[[3]]
-		ind_mu0   <- res_part[[4]]		
+		a0        <- res_part[[3]]
+		ind_sig2  <- res_part[[4]]
+		ind_mu0   <- res_part[[5]]		
 	}
 
-	
-	
 	#names(ind_sig2) = c(names(x), D[-1,1])
 
 	x <- x[tree$tip.label]
@@ -531,9 +579,10 @@ run_mcmc <- function (fbm_obj,ngen = 100000, control = list(),useVCV=F, sample=2
 	anc_node_of_NAtaxa            = c()
 	anc_state_anc_node_of_NAtaxa  = c()
 
-	cat(c("it", "posterior","likelihood","prior", "sig2", "mu0","K_sig2","K_mu0", 
-		paste("sig2", 1:length(TE[,1]),sep="_"),paste("mu0", 1:length(TE[,1]),sep="_"), paste("anc",
-		D[,1],sep="_"), tree$tip.label[ind_NA_taxa],"\n"),sep="\t", file=logfile, append=F)
+	cat(c("it", "posterior","likelihood","prior", "sig2", "mu0","a0","K_sig2","K_mu0", 
+		paste("sig2", 1:length(TE[,1]),sep="_"),paste("mu0", 1:length(TE[,1]),sep="_"),
+		paste("a0", 1:length(TE[,1]),sep="_"), 
+		paste("anc",D[,1],sep="_"), tree$tip.label[ind_NA_taxa],"\n"),sep="\t", file=logfile, append=F)
 	
 	for (tax in 1:length(ind_NA_taxa)){
 		ind_NAtaxa_in_D = c(ind_NAtaxa_in_D,   which(D[,2] == ind_NA_taxa[tax]),      which(D[,3] == ind_NA_taxa[tax]))
@@ -546,12 +595,14 @@ run_mcmc <- function (fbm_obj,ngen = 100000, control = list(),useVCV=F, sample=2
 	# phylo imputation
 	x[ind_NA_taxa]  = NA
 	vector_tip_root_nodes_values = c(x, a, y)
-	x_imputed = phylo_imputation(tree, vector_tip_root_nodes_values, sig2[ind_sig2],D,mu0[ind_mu0],ind_NAtaxa_in_D,anc_node_of_NAtaxa,brl_NAtaxa_in_D,get_expected=1)
+	x_imputed = phylo_imputation(tree, vector_tip_root_nodes_values, sig2[ind_sig2],D,mu0[ind_mu0],a0[ind_mu0],ind_NAtaxa_in_D,
+		   				anc_node_of_NAtaxa,brl_NAtaxa_in_D,fbm_obj$dist_from_root,get_expected=1)
 	x[ind_NA_taxa]  = x_imputed
 	
 	fbm_obj$data <- x
 	
-	L  <- newlnLike(fbm_obj, c(x, a, y), sig2[ind_sig2],mu0[ind_mu0])
+	L   <- newlnLike(fbm_obj, c(x, a, y), sig2[ind_sig2],mu0[ind_mu0],a0[ind_mu0])
+
 	Pr <- calc_prior(sig2, a, y,mu0, prior_tbl)
 	
 	# get indexes
@@ -588,12 +639,13 @@ run_mcmc <- function (fbm_obj,ngen = 100000, control = list(),useVCV=F, sample=2
 		a.prime     = a
 		sig2.prime  = sig2
 		mu0.prime   = mu0
+		a0.prime    = a0
 		gibbs=0
 		hastings=0
     	    	
 		# SCREEN OUTPUT / DYNAMIC PLOTS
 		if (i %% print_freq==0){
-			cat(c("\n",i,round(sum(L),2),length(sig2),length(mu0)))
+			cat(c("\n",i,round(sum(L),2),length(sig2),length(mu0),a0,a0.prime))
 		}
 		
 		if (dynamicPlot == T){
@@ -611,7 +663,8 @@ run_mcmc <- function (fbm_obj,ngen = 100000, control = list(),useVCV=F, sample=2
 	    		        plot.phylo(tree, edge.width=rates_temp[IND_edge]*3, main="median rates",show.tip.label = F)
 				
 	    		        rates_temp =sig2.prime[ind_sig2]
-	    		        plot.phylo(tree, edge.width=rates_temp[IND_edge]*3, main=paste("lik:",round(sum(L),2),"cat:",length(unique(ind_sig2))),show.tip.label = F)
+	    		        plot.phylo(tree, edge.width=rates_temp[IND_edge]*3, main=paste("lik:",round(sum(L),2),
+				  "cat:",length(unique(ind_sig2))),show.tip.label = F)
 				
 				
 			}
@@ -630,8 +683,13 @@ run_mcmc <- function (fbm_obj,ngen = 100000, control = list(),useVCV=F, sample=2
 			}
 			else if (rr[2]<0.66 && useTrend==T){ # MU0 UPDATE
 				m_ind  = sample(1:length(mu0),1)
-				mu0_update <-  mu0[m_ind] + rnorm(n = 1, sd = 0.2)
+				mu0_update <-  mu0[m_ind] + rnorm(n = 1, sd = 0.1)
+				if (linTrend){
+					a0_update <-  a0[m_ind] + rnorm(n = 1, sd = 0.05)
+					a0.prime[m_ind] = a0_update
+				}	
 				mu0.prime[m_ind] = mu0_update
+				
 			}
 			else{ # ROOT STATE
 				a.prime <- a + rnorm(n = 1, sd = 0.5) #sqrt(con$prop[j + 1]))
@@ -642,33 +700,36 @@ run_mcmc <- function (fbm_obj,ngen = 100000, control = list(),useVCV=F, sample=2
 			# ANC STATES
 			#useTrend=F
 			RUNIF = runif(3,0,1)
-			if (RUNIF[1]<bdmcmc_freq && i > 1000){
+			if (RUNIF[1]<bdmcmc_freq && i > 100){
 				trait_states=c(x, a.prime, y.prime)
 				if (useTrend){
 					death_sig2=sample(2,1)
 				}else{death_sig2=1}
 				if (constRate==T){death_sig2=2}	
-				bdmcmc_list   = run_BDMCMC(fbm_obj, trait_states, sig2.prime,ind_sig2, mu0.prime, ind_mu0,IND_edge,new_ind,desc_index_list,death_sig2)
-				sig2.prime    = bdmcmc_list[[1]]
-				ind_sig2      = bdmcmc_list[[2]]					
-				mu0.prime     = bdmcmc_list[[3]]
-				ind_mu0       = bdmcmc_list[[4]]										
-				#print (ind_mu0)
-				gibbs=1
+					bdmcmc_list   = run_BDMCMC(fbm_obj, trait_states, sig2.prime,ind_sig2, mu0.prime, ind_mu0, a0.prime, 
+										IND_edge,new_ind,desc_index_list,death_sig2)
+					sig2.prime    = bdmcmc_list[[1]]
+					ind_sig2      = bdmcmc_list[[2]]					
+					mu0.prime     = bdmcmc_list[[3]]
+					a0.prime      = bdmcmc_list[[4]]
+					ind_mu0       = bdmcmc_list[[5]]										
+					#print (ind_mu0)
+					gibbs=1
 			} else {
 				
 				if (runif(1)<0.1){
 					# phylo imputation
 					x[ind_NA_taxa]  = NA
 					vector_tip_root_nodes_values = c(x, a.prime, y.prime)
-					x_imputed = phylo_imputation(tree, vector_tip_root_nodes_values, sig2.prime[ind_sig2],D,mu0.prime[ind_mu0],ind_NAtaxa_in_D,anc_node_of_NAtaxa,brl_NAtaxa_in_D,get_expected=0)
+					x_imputed = phylo_imputation(tree, vector_tip_root_nodes_values, sig2.prime[ind_sig2],D,mu0.prime[ind_mu0],a0.prime[ind_mu0],
+										ind_NAtaxa_in_D,anc_node_of_NAtaxa,brl_NAtaxa_in_D,dist_from_root,get_expected=0)
 					x[ind_NA_taxa]  = x_imputed
 					fbm_obj$data <- x
 					gibbs=1
 				}else{
 					# gibbs update anc states
 					vector_tip_root_nodes_values = c(x, a.prime, y.prime)
-					y_temp = runGibbs(fbm_obj,sig2.prime[ind_sig2], vector_tip_root_nodes_values,mu0.prime[ind_mu0],get_expected=0)
+					y_temp = runGibbs(fbm_obj,sig2.prime[ind_sig2], vector_tip_root_nodes_values,mu0.prime[ind_mu0],a0.prime[ind_mu0],get_expected=0)
 					a.prime= y_temp[1]
 					y.prime= y_temp[-1]
 					gibbs=1					
@@ -681,7 +742,7 @@ run_mcmc <- function (fbm_obj,ngen = 100000, control = list(),useVCV=F, sample=2
 		
 		
 	       # calc post
-		L.prime <- newlnLike(fbm_obj, c(x, a.prime, y.prime), sig2.prime[ind_sig2],mu0.prime[ind_mu0])	
+		L.prime <- newlnLike(fbm_obj, c(x, a.prime, y.prime), sig2.prime[ind_sig2],mu0.prime[ind_mu0],a0.prime[ind_mu0])			
 		Pr.prime <- calc_prior(sig2.prime, a.prime, y.prime, mu0.prime, prior_tbl)
 		
 		#print( c(sum(L.prime), sum(Pr.prime), sig2.prime, a.prime, mu0.prime, x[ind_NA_taxa], sum(Pr), sum(L)) )
@@ -694,13 +755,15 @@ run_mcmc <- function (fbm_obj,ngen = 100000, control = list(),useVCV=F, sample=2
 			a    = a.prime
 			sig2 = sig2.prime
 			mu0  = mu0.prime
+			a0   = a0.prime
 		}
  
-	     if (i%%sample == 0) {
+	     if (i %% sample_f == 0) {
 			rates_temp=sig2[ind_sig2]
 			trends_temp=mu0[ind_mu0]
-			cat(c(i,sum(L)+sum(Pr), sum(L),sum(Pr), mean(sig2[ind_sig2]),mean(mu0[ind_mu0]), length(sig2),length(mu0), 
-				rates_temp[IND_edge],trends_temp[IND_edge], a, y, x_imputed, "\n"),sep="\t", file=logfile, append=T) 
+			trend_trends = a0[ind_mu0]
+			cat(c(i,sum(L)+sum(Pr), sum(L),sum(Pr), mean(sig2[ind_sig2]),mean(mu0[ind_mu0]),mean(a0[ind_mu0]), length(sig2),length(mu0), 
+				rates_temp[IND_edge],trends_temp[IND_edge],trend_trends[IND_edge], a, y, x_imputed, "\n"),sep="\t", file=logfile, append=T) 
 			#print(x[ind_NA_taxa])
 	    }
     
