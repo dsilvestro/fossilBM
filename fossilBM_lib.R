@@ -683,9 +683,9 @@ run_mcmc <- function (fbm_obj,ngen = 100000, control = list(),useVCV=F, sample_f
 			}
 			else if (rr[2]<0.66 && useTrend==T){ # MU0 UPDATE
 				m_ind  = sample(1:length(mu0),1)
-				mu0_update <-  mu0[m_ind] + rnorm(n = 1, sd = 0.1)
+				mu0_update <-  mu0[m_ind] + rnorm(n = 1, sd = 0.05)
 				if (linTrend){
-					a0_update <-  a0[m_ind] + rnorm(n = 1, sd = 0.05)
+					a0_update <-  a0[m_ind] + rnorm(n = 1, sd = 0.001)
 					a0.prime[m_ind] = a0_update
 				}	
 				mu0.prime[m_ind] = mu0_update
@@ -949,12 +949,12 @@ return(rr$par)
 
 
 
-plot_results <- function(fbm_obj, fLOG, resfile="results.pdf" , exp_trait_data=0){	
+plot_results <- function(fbm_obj, logfile, resfile="results.pdf" , exp_trait_data=0){	
 	require(phytools)
 	require(methods)
 	library(scales)
 	library(plotrix)
-	out_tbl = read.table(fLOG,header=T)
+	out_tbl = read.table(logfile,header=T)
 	ind_sig2_col = grep('sig2_', colnames(out_tbl), value=F)
 	burnin= round(0.25*dim(out_tbl)[1])
 
@@ -1115,5 +1115,68 @@ plot_results <- function(fbm_obj, fLOG, resfile="results.pdf" , exp_trait_data=0
 
 	n<-dev.off()
 
+}
+
+
+plot_res_trend <-function(res,t, ylab,main=""){
+	for (s in 1:dim(res)[1]){
+		col = alpha("black",0.2)
+		if (s==1){
+			plot(sort(-t),res[1,], ylab=ylab,xlab="Time", type="l",
+				 ylim = c(min(res), max(res)), col=col, main=main)
+			abline(0,0,lty=2)
+		}else{
+			lines(sort(-t),res[s,],col=col)
+		}
+	}
+}
+
+plot_time_varying_trend <- function(fbm_obj, logfile, resfile="trends.pdf"){
+	out_tbl = read.table(logfile,header=T)
+	ind_mu0_col = grep('mu0_', colnames(out_tbl), value=F)
+	ind_a0_col = grep('a0_', colnames(out_tbl), value=F)
+	burnin= round(0.25*dim(out_tbl)[1])
+	out_tbl <- out_tbl[burnin:dim(out_tbl)[1], ]
+	
+	root_age = max(fbm_obj$dist_from_root)
+	
+	mu0_temp_mean = unique(apply(out_tbl[, ind_mu0_col],FUN=mean,2))
+	a0_temp_mean = unique(apply(out_tbl[, ind_a0_col],FUN=mean,2))
+	
+	pdf(file=resfile,width=15*0.75, height=10*0.75)
+	par(mfrow = c(2,length(mu0_temp_mean)))
+	
+	t = seq(0,root_age,length.out=1000)
+	for (i in 1:length(mu0_temp_mean)){
+		
+		res = NULL
+		for (s in 1:100){
+			indx = sample(1:dim(out_tbl)[1], size=1)
+			mu0_s = unique(as.numeric(out_tbl[indx, ind_mu0_col]))
+			a0_s = unique(as.numeric(out_tbl[indx, ind_a0_col]))
+			evolving_trend = a0_s[i]*t*t + mu0_s[i]*t + 0
+			res = rbind(res,evolving_trend)
+		}
+		plot_res_trend(res, t, ylab="Change in expected phenptype (y_t)", 
+					main = paste0("Partition ", i))
+		mean_res = apply(res,FUN=mean,2)
+		lines(sort(-t),mean_res, lwd=2,col="red")
+		
+		res = NULL
+		for (s in 1:100){
+			indx = sample(1:dim(out_tbl)[1], size=1)
+			mu0_s = unique(as.numeric(out_tbl[indx, ind_mu0_col]))
+			a0_s = unique(as.numeric(out_tbl[indx, ind_a0_col]))
+			evolution_of_the_trend = a0_s[i]*t + mu0_s[i]
+			res = rbind(res,evolution_of_the_trend)
+		}
+		plot_res_trend(res, t, ylab="Trend parameter (mu_t)")
+		mean_res = apply(res,FUN=mean,2)
+		lines(sort(-t),mean_res, lwd=2,col="red")
+		
+		
+	}
+	n<- dev.off()
+	
 }
 
