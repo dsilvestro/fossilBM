@@ -134,7 +134,7 @@ phylo_imputation <-function(tree, vector_tip_root_nodes_values, sigma2,D,mu0,a0,
 	vec_values = vector_tip_root_nodes_values
 	anc_v <- vec_values[anc_of_NAtaxa] # anc value
 	if (get_expected==0){
-		new_val = rnorm(length(brl_NAtaxa_in_D), mean=(anc_v+mu0[ind_NAtaxa_in_D]*brl_NAtaxa_in_D), sd= sqrt(brl_NAtaxa_in_D*sigma2[ind_NAtaxa_in_D]))
+		new_val = rnorm(length(brl_NAtaxa_in_D), mean=(anc_v+mu0[ind_NAtaxa_in_D]*brl_NAtaxa_in_D + a0[ind_NAtaxa_in_D]*root_dist[ind_NAtaxa_in_D]*brl_NAtaxa_in_D), sd= sqrt(brl_NAtaxa_in_D*sigma2[ind_NAtaxa_in_D]))
 	}else{
 		new_val = anc_v + mu0[ind_NAtaxa_in_D]*brl_NAtaxa_in_D + a0[ind_NAtaxa_in_D]*root_dist[ind_NAtaxa_in_D]*brl_NAtaxa_in_D
 	}
