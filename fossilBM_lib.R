@@ -722,7 +722,7 @@ run_mcmc <- function (fbm_obj,ngen = 100000, control = list(),useVCV=F, sample_f
 					x[ind_NA_taxa]  = NA
 					vector_tip_root_nodes_values = c(x, a.prime, y.prime)
 					x_imputed = phylo_imputation(tree, vector_tip_root_nodes_values, sig2.prime[ind_sig2],D,mu0.prime[ind_mu0],a0.prime[ind_mu0],
-										ind_NAtaxa_in_D,anc_node_of_NAtaxa,brl_NAtaxa_in_D,dist_from_root,get_expected=0)
+										ind_NAtaxa_in_D,anc_node_of_NAtaxa,brl_NAtaxa_in_D,fbm_obj$dist_from_root,get_expected=0)
 					x[ind_NA_taxa]  = x_imputed
 					fbm_obj$data <- x
 					gibbs=1
