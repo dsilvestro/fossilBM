@@ -6,8 +6,8 @@ library(adephylo)
 
 
 
-read_and_transform_data <- function(treefile, datafile, rm_extinct=FALSE, 
-	log_trait_data=0, rescale_trait_data=1,root_calibration=c(0,100),partition_file="", tindex=1){
+read_and_transform_data <- function(treefile, datafile, rm_extinct=FALSE, tindex=1, drop_na=FALSE,
+	log_trait_data=0, rescale_trait_data=1,root_calibration=c(0,100),partition_file="",zero_br=0){
 	
 		t<- read.nexus(treefile)
 		if (class(t)=="phylo") { 
@@ -18,6 +18,7 @@ read_and_transform_data <- function(treefile, datafile, rm_extinct=FALSE,
 		if (class(t) == "multiPhylo") { 
 			t <- t[[tindex]]
 			original_simulated_tree <-t
+			t$edge.length <- t$edge.length + zero_br
 			name_tag=paste("_tree_",tindex, sep="")
 			} 
 
@@ -32,6 +33,9 @@ read_and_transform_data <- function(treefile, datafile, rm_extinct=FALSE,
 
 		fbm_obj = NULL
 		trait <- read.table(datafile, header=F,row.names=1)
+		if (drop_na){
+			trait <- na.omit(trait)
+		}
 		treetrait <- treedata(t,trait) # match trait data and phylogeny
 		tree <- treetrait$phy
 		tree$edge.length [which(tree$edge.length==0) ]<- 0.00000001
@@ -52,16 +56,14 @@ read_and_transform_data <- function(treefile, datafile, rm_extinct=FALSE,
 		fbm_obj$ntips <- tree$Nnode+1
 		fbm_obj$D <- build_table(tree, fbm_obj$ntips,fbm_obj$data)
 		BR <- branching.times(tree) # sorted from root to most recent
-		fbm_obj$dist_from_root <- c(distRoot(fbm_obj$tree,tips="all",method =c( "patristic")), max(BR)-BR)
+		fbm_obj$dist_from_the_root <- c(distRoot(fbm_obj$tree,tips="all",method =c( "patristic")), max(BR)-BR)
+		fbm_obj$dist_from_midpoint <- fbm_obj$dist_from_the_root - 0.5*max(fbm_obj$dist_from_the_root)
 		fbm_obj$prior_tbl <- get_calibration_tbl(fbm_obj$D,root_calibration)
 		fbm_obj$PartitionFile <- partition_file
 		fbm_obj$trait_rescaling <- rescale_trait_data
 		
 		return(fbm_obj)	
 }
-
-
-
 
 
 update_multiplier_proposal <- function(i,d){
@@ -90,7 +92,7 @@ newlnLike <- function(fbm_obj, vector_tip_root_nodes_values, sigma2,mu0, a0) {
 	tree <- fbm_obj$tree
 	ntips <- fbm_obj$ntips
 	D <- fbm_obj$D
-	root_dist <- as.numeric(fbm_obj$dist_from_root)
+	root_dist <- as.numeric(fbm_obj$dist_from_midpoint)
 	names(root_dist) <- names(vector_tip_root_nodes_values)
 	vec_values = vector_tip_root_nodes_values
 	anc_ind_v <- D[,1]
@@ -105,27 +107,6 @@ newlnLike <- function(fbm_obj, vector_tip_root_nodes_values, sigma2,mu0, a0) {
 	b_ind_v[b_ind_v>ntips] =b_ind_v[b_ind_v>ntips]-1
 	L1 = dnorm(a_v, mean=(anc_v+mu0[a_ind_v]*vpa_v + a0[a_ind_v]*vpa_v*root_dist[a_ind_v]), sd= sqrt(vpa_v*sigma2[a_ind_v]),log=T)
 	L2 = dnorm(b_v, mean=(anc_v+mu0[b_ind_v]*vpb_v + a0[b_ind_v]*vpb_v*root_dist[b_ind_v]), sd= sqrt(vpb_v*sigma2[b_ind_v]),log=T)  
-	L = L1+L2
-	return(L) 
-}
-
-newlnLike_old<-function(fbm_obj, vector_tip_root_nodes_values, sigma2,mu0, null) {
-	tree <- fbm_obj$tree
-	ntips <- fbm_obj$ntips
-	D <- fbm_obj$D
-	vec_values = vector_tip_root_nodes_values
-	anc_ind_v <- D[,1]
-	a_ind_v   <- D[,2]
-	b_ind_v   <- D[,3]
-	vpa_v     <- D[,4]
-	vpb_v     <- D[,5]
-	anc_v <- vec_values[anc_ind_v]
-	a_v   <- vec_values[a_ind_v]
-	b_v   <- vec_values[b_ind_v]
-	a_ind_v[a_ind_v>ntips] =a_ind_v[a_ind_v>ntips]-1
-	b_ind_v[b_ind_v>ntips] =b_ind_v[b_ind_v>ntips]-1
-	L1 = dnorm(a_v, mean=(anc_v+mu0[a_ind_v]*vpa_v), sd= sqrt(vpa_v*sigma2[a_ind_v]),log=T)
-	L2 = dnorm(b_v, mean=(anc_v+mu0[b_ind_v]*vpb_v), sd= sqrt(vpb_v*sigma2[b_ind_v]),log=T)  
 	L = L1+L2
 	return(L) 
 }
@@ -190,7 +171,7 @@ runGibbs <- function(fbm_obj,sigma2, vector_tip_root_nodes_values,mu0, a0,get_ex
 	D          <- fbm_obj$D
 	prior_tbl  <- fbm_obj$prior_tbl
 	#prior_tbl = calc_prior_dist_root_calibration(D,sigma2)
-	root_dist <- fbm_obj$dist_from_root
+	root_dist <- fbm_obj$dist_from_midpoint
 	
 	vec_values = vector_tip_root_nodes_values
         # loop over Johnatan's tbl from most recent to root
@@ -255,11 +236,12 @@ runGibbs <- function(fbm_obj,sigma2, vector_tip_root_nodes_values,mu0, a0,get_ex
 	return(vec_values[D[,1]] )
 }
 
-calc_prior <- function(sig2, a, y, mu0, prior_tbl) {
+calc_prior <- function(sig2, a, y, mu0, delta_a0, prior_tbl) {
 	prior_sig2 = sum(dexp(sig2, 0.5, log = TRUE) ) #sum(dgamma(sig2, 2,1, log = TRUE) )
 	prior_root = sum(dnorm(c(a), mean = prior_tbl[,1], sd = prior_tbl[,2], log = T))
 	prior_mu0  = sum(dnorm(mu0, mean = 0, sd = 1, log = T))
-	return(prior_sig2+prior_root+prior_mu0)
+	prior_da0  = sum(dnorm(delta_a0, mean = 0, sd = 1, log = T))
+	return(prior_sig2+prior_root+prior_mu0+prior_da0)
 }
 
 set_model_partitions <- function(fbm_obj,ind_sig2,ind_mu0){
@@ -529,8 +511,8 @@ run_mcmc <- function (fbm_obj,ngen = 100000, control = list(),useVCV=F, sample_f
 	PartitionFile <- fbm_obj$PartitionFile
 	
 	TE=as.matrix(tree$edge)
-	a <- 0
-	y <- rep(0, tree$Nnode - 1)
+	a <- mean(fbm_obj$data,na.rm=T)
+	y <- rep(a, tree$Nnode - 1)
 	sig2 <- c(0.2)  
 	mu0 <- c(0)
 	a0 <- c(0)
@@ -596,14 +578,14 @@ run_mcmc <- function (fbm_obj,ngen = 100000, control = list(),useVCV=F, sample_f
 	x[ind_NA_taxa]  = NA
 	vector_tip_root_nodes_values = c(x, a, y)
 	x_imputed = phylo_imputation(tree, vector_tip_root_nodes_values, sig2[ind_sig2],D,mu0[ind_mu0],a0[ind_mu0],ind_NAtaxa_in_D,
-		   				anc_node_of_NAtaxa,brl_NAtaxa_in_D,fbm_obj$dist_from_root,get_expected=1)
+		   				anc_node_of_NAtaxa,brl_NAtaxa_in_D,fbm_obj$dist_from_midpoint,get_expected=1)
 	x[ind_NA_taxa]  = x_imputed
 	
 	fbm_obj$data <- x
 	
 	L   <- newlnLike(fbm_obj, c(x, a, y), sig2[ind_sig2],mu0[ind_mu0],a0[ind_mu0])
 
-	Pr <- calc_prior(sig2, a, y,mu0, prior_tbl)
+	Pr <- calc_prior(sig2, a, y,mu0, a0, prior_tbl)
 	
 	# get indexes
 	IND_edge = c()
@@ -683,9 +665,12 @@ run_mcmc <- function (fbm_obj,ngen = 100000, control = list(),useVCV=F, sample_f
 			}
 			else if (rr[2]<0.66 && useTrend==T){ # MU0 UPDATE
 				m_ind  = sample(1:length(mu0),1)
-				mu0_update <-  mu0[m_ind] + rnorm(n = 1, sd = 0.05)
+				mu0_update <-  mu0[m_ind] + rnorm(n = 1, sd = sd(fbm_obj$data, na.rm=T)*0.05)
 				if (linTrend){
-					a0_update <-  a0[m_ind] + rnorm(n = 1, sd = 0.001)
+					#delta_a0 <- mu0-a0
+					#
+					#
+					a0_update <-  a0[m_ind] + rnorm(n = 1, sd = sd(fbm_obj$data, na.rm=T)*0.0005)
 					a0.prime[m_ind] = a0_update
 				}	
 				mu0.prime[m_ind] = mu0_update
@@ -722,7 +707,7 @@ run_mcmc <- function (fbm_obj,ngen = 100000, control = list(),useVCV=F, sample_f
 					x[ind_NA_taxa]  = NA
 					vector_tip_root_nodes_values = c(x, a.prime, y.prime)
 					x_imputed = phylo_imputation(tree, vector_tip_root_nodes_values, sig2.prime[ind_sig2],D,mu0.prime[ind_mu0],a0.prime[ind_mu0],
-										ind_NAtaxa_in_D,anc_node_of_NAtaxa,brl_NAtaxa_in_D,fbm_obj$dist_from_root,get_expected=0)
+										ind_NAtaxa_in_D,anc_node_of_NAtaxa,brl_NAtaxa_in_D,fbm_obj$dist_from_midpoint,get_expected=0)
 					x[ind_NA_taxa]  = x_imputed
 					fbm_obj$data <- x
 					gibbs=1
@@ -732,6 +717,13 @@ run_mcmc <- function (fbm_obj,ngen = 100000, control = list(),useVCV=F, sample_f
 					y_temp = runGibbs(fbm_obj,sig2.prime[ind_sig2], vector_tip_root_nodes_values,mu0.prime[ind_mu0],a0.prime[ind_mu0],get_expected=0)
 					a.prime= y_temp[1]
 					y.prime= y_temp[-1]
+					#x[ind_NA_taxa]  = NA
+					#vector_tip_root_nodes_values = c(x, a.prime, y.prime)
+					#x_imputed = phylo_imputation(tree, vector_tip_root_nodes_values, sig2.prime[ind_sig2],D,mu0.prime[ind_mu0],a0.prime[ind_mu0],
+					#					ind_NAtaxa_in_D,anc_node_of_NAtaxa,brl_NAtaxa_in_D,fbm_obj$dist_from_midpoint,get_expected=0)
+					#x[ind_NA_taxa]  = x_imputed
+					#fbm_obj$data <- x
+					
 					gibbs=1					
 				}
 				
@@ -743,7 +735,7 @@ run_mcmc <- function (fbm_obj,ngen = 100000, control = list(),useVCV=F, sample_f
 		
 	       # calc post
 		L.prime <- newlnLike(fbm_obj, c(x, a.prime, y.prime), sig2.prime[ind_sig2],mu0.prime[ind_mu0],a0.prime[ind_mu0])			
-		Pr.prime <- calc_prior(sig2.prime, a.prime, y.prime, mu0.prime, prior_tbl)
+		Pr.prime <- calc_prior(sig2.prime, a.prime, y.prime, mu0.prime, a0.prime, prior_tbl)
 		
 		#print( c(sum(L.prime), sum(Pr.prime), sig2.prime, a.prime, mu0.prime, x[ind_NA_taxa], sum(Pr), sum(L)) )
 		
@@ -1138,7 +1130,7 @@ plot_time_varying_trend <- function(fbm_obj, logfile, resfile="trends.pdf"){
 	burnin= round(0.25*dim(out_tbl)[1])
 	out_tbl <- out_tbl[burnin:dim(out_tbl)[1], ]
 	
-	root_age = max(fbm_obj$dist_from_root)
+	root_age = max(fbm_obj$dist_from_the_root)
 	
 	mu0_temp_mean = unique(apply(out_tbl[, ind_mu0_col],FUN=mean,2))
 	a0_temp_mean = unique(apply(out_tbl[, ind_a0_col],FUN=mean,2))
@@ -1146,7 +1138,8 @@ plot_time_varying_trend <- function(fbm_obj, logfile, resfile="trends.pdf"){
 	pdf(file=resfile,width=15*0.75, height=10*0.75)
 	par(mfrow = c(2,length(mu0_temp_mean)))
 	
-	t = seq(0,root_age,length.out=1000)
+	t = seq(-root_age*0.5,root_age*0.5,length.out=1000)
+	time_axis = seq(0,root_age,length.out=1000)
 	for (i in 1:length(mu0_temp_mean)){
 		
 		res = NULL
@@ -1155,12 +1148,13 @@ plot_time_varying_trend <- function(fbm_obj, logfile, resfile="trends.pdf"){
 			mu0_s = unique(as.numeric(out_tbl[indx, ind_mu0_col]))
 			a0_s = unique(as.numeric(out_tbl[indx, ind_a0_col]))
 			evolving_trend = a0_s[i]*t*t + mu0_s[i]*t + 0
+			evolving_trend = (evolving_trend - evolving_trend[length(evolving_trend)]) *(1/fbm_obj$trait_rescaling)
 			res = rbind(res,evolving_trend)
 		}
-		plot_res_trend(res, t, ylab="Change in expected phenptype (y_t)", 
+		plot_res_trend(res, time_axis, ylab="Change in expected phenotype (y_t)", 
 					main = paste0("Partition ", i))
 		mean_res = apply(res,FUN=mean,2)
-		lines(sort(-t),mean_res, lwd=2,col="red")
+		lines(sort(-time_axis),mean_res, lwd=2,col="red")
 		
 		res = NULL
 		for (s in 1:100){
@@ -1170,9 +1164,9 @@ plot_time_varying_trend <- function(fbm_obj, logfile, resfile="trends.pdf"){
 			evolution_of_the_trend = a0_s[i]*t + mu0_s[i]
 			res = rbind(res,evolution_of_the_trend)
 		}
-		plot_res_trend(res, t, ylab="Trend parameter (mu_t)")
+		plot_res_trend(res, time_axis, ylab="Trend parameter (mu_t)")
 		mean_res = apply(res,FUN=mean,2)
-		lines(sort(-t),mean_res, lwd=2,col="red")
+		lines(sort(-time_axis),mean_res, lwd=2,col="red")
 		
 		
 	}
