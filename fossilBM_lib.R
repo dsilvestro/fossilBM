@@ -1,7 +1,6 @@
 library(scales)
 require(phytools)
 library(geiger)
-library(TreeSim)
 library(adephylo)
 
 
