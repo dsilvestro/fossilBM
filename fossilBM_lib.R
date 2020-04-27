@@ -1109,18 +1109,30 @@ plot_results <- function(fbm_obj, logfile, resfile="results.pdf" , exp_trait_dat
 }
 
 
-plot_res_trend <-function(res,t, ylab,main=""){
+
+
+plot_res_trend <-function(res,time_axis, ylab,main=""){
+	library(HDInterval)
+	CI = hdi(res)
+	CI_max = CI["upper",]
+	CI_min = CI["lower",]
+	significantly_positive = -time_axis[which(CI_min > 0)]
+	significantly_negative = -time_axis[which(CI_max < 0)]
+	plot(sort(-time_axis),res[1,], ylab=ylab,xlab="Time", type="n",
+		 ylim = c(min(res), max(res)), main=main)
+	abline(0,0,lty=2)
+	points(significantly_positive, rep(min(res), length(significantly_positive)), col="darkred")
+	points(significantly_negative, rep(min(res), length(significantly_negative)), col="blue")
+	
 	for (s in 1:dim(res)[1]){
-		col = alpha("black",0.2)
-		if (s==1){
-			plot(sort(-t),res[1,], ylab=ylab,xlab="Time", type="l",
-				 ylim = c(min(res), max(res)), col=col, main=main)
-			abline(0,0,lty=2)
-		}else{
-			lines(sort(-t),res[s,],col=col)
-		}
+		lines(sort(-time_axis),res[s,],col=alpha("black",0.2))
 	}
+	CIm = t(as.data.frame(CI))
+	return(CIm)
 }
+
+
+
 
 plot_time_varying_trend <- function(fbm_obj, logfile, resfile="trends.pdf"){
 	out_tbl = read.table(logfile,header=T)
@@ -1135,7 +1147,7 @@ plot_time_varying_trend <- function(fbm_obj, logfile, resfile="trends.pdf"){
 	a0_temp_mean = unique(apply(out_tbl[, ind_a0_col],FUN=mean,2))
 	
 	pdf(file=resfile,width=15*0.75, height=10*0.75)
-	par(mfrow = c(2,length(mu0_temp_mean)))
+	par(mfrow = c(length(mu0_temp_mean),2))
 	
 	t = seq(-root_age*0.5,root_age*0.5,length.out=1000)
 	time_axis = seq(0,root_age,length.out=1000)
@@ -1150,10 +1162,20 @@ plot_time_varying_trend <- function(fbm_obj, logfile, resfile="trends.pdf"){
 			evolving_trend = (evolving_trend - evolving_trend[length(evolving_trend)]) *(1/fbm_obj$trait_rescaling)
 			res = rbind(res,evolving_trend)
 		}
-		plot_res_trend(res, time_axis, ylab="Change in expected phenotype (y_t)", 
+		sig_res_phenotype <- plot_res_trend(res, time_axis, ylab="Change in expected phenotype (y_t)", 
 					main = paste0("Partition ", i))
 		mean_res = apply(res,FUN=mean,2)
 		lines(sort(-time_axis),mean_res, lwd=2,col="red")
+		if (i == 1){
+			res_tbl = cbind(-time_axis, mean_res, sig_res_phenotype)
+			colnames(res_tbl) <- c("time", paste0("Partition-", i, "_mean"), paste0("Partition-", i, "_min"), paste0("Partition_", i, "-max"))
+		} else{
+			temp = cbind(mean_res, sig_res_phenotype)
+			colnames(temp) <- c(paste0("Partition_", i, "_mean"), paste0("Partition_", i, "_min"), paste0("Partition_", i, "_max"))
+			res_tbl = cbind(res_tbl, temp)
+		}
+		
+		
 		
 		res = NULL
 		for (s in 1:100){
@@ -1163,13 +1185,25 @@ plot_time_varying_trend <- function(fbm_obj, logfile, resfile="trends.pdf"){
 			evolution_of_the_trend = a0_s[i]*t + mu0_s[i]
 			res = rbind(res,evolution_of_the_trend)
 		}
-		plot_res_trend(res, time_axis, ylab="Trend parameter (mu_t)")
+		sig_res_trend <- plot_res_trend(res, time_axis, ylab="Trend parameter (mu_t)")
 		mean_res = apply(res,FUN=mean,2)
 		lines(sort(-time_axis),mean_res, lwd=2,col="red")
+		
+		if (i == 1){
+			res_trend = cbind(-time_axis, mean_res, sig_res_phenotype)
+			colnames(res_tbl) <- c("time", paste0("Partition-", i, "_mean"), paste0("Partition-", i, "_min"), paste0("Partition_", i, "-max"))
+		} else{
+			temp = cbind(mean_res, sig_res_phenotype)
+			colnames(temp) <- c(paste0("Partition_", i, "_mean"), paste0("Partition_", i, "_min"), paste0("Partition_", i, "_max"))
+			res_trend = cbind(res_trend, temp)
+		}
+		
 		
 		
 	}
 	n<- dev.off()
+	
+	return(list(res_tbl, res_trend))
 	
 }
 
