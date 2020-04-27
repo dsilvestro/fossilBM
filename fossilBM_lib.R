@@ -1112,20 +1112,21 @@ plot_results <- function(fbm_obj, logfile, resfile="results.pdf" , exp_trait_dat
 
 
 plot_res_trend <-function(res,time_axis, ylab,main=""){
+	time_axis = sort(-time_axis)
 	library(HDInterval)
 	CI = hdi(res)
 	CI_max = CI["upper",]
 	CI_min = CI["lower",]
-	significantly_positive = -time_axis[which(CI_min > 0)]
-	significantly_negative = -time_axis[which(CI_max < 0)]
-	plot(sort(-time_axis),res[1,], ylab=ylab,xlab="Time", type="n",
+	significantly_positive = time_axis[which(CI_min > 0)]
+	significantly_negative = time_axis[which(CI_max < 0)]
+	plot(time_axis,res[1,], ylab=ylab,xlab="Time", type="n",
 		 ylim = c(min(res), max(res)), main=main)
 	abline(0,0,lty=2)
 	points(significantly_positive, rep(min(res), length(significantly_positive)), col="darkred")
 	points(significantly_negative, rep(min(res), length(significantly_negative)), col="blue")
 	
-	for (s in 1:dim(res)[1]){
-		lines(sort(-time_axis),res[s,],col=alpha("black",0.2))
+	for (s in 1:min(100,dim(res)[1])){
+		lines(time_axis,res[s,],col=alpha("black",0.2))
 	}
 	CIm = t(as.data.frame(CI))
 	return(CIm)
@@ -1154,7 +1155,7 @@ plot_time_varying_trend <- function(fbm_obj, logfile, resfile="trends.pdf"){
 	for (i in 1:length(mu0_temp_mean)){
 		
 		res = NULL
-		for (s in 1:100){
+		for (s in 1:1000){
 			indx = sample(1:dim(out_tbl)[1], size=1)
 			mu0_s = unique(as.numeric(out_tbl[indx, ind_mu0_col]))
 			a0_s = unique(as.numeric(out_tbl[indx, ind_a0_col]))
@@ -1178,7 +1179,7 @@ plot_time_varying_trend <- function(fbm_obj, logfile, resfile="trends.pdf"){
 		
 		
 		res = NULL
-		for (s in 1:100){
+		for (s in 1:1000){
 			indx = sample(1:dim(out_tbl)[1], size=1)
 			mu0_s = unique(as.numeric(out_tbl[indx, ind_mu0_col]))
 			a0_s = unique(as.numeric(out_tbl[indx, ind_a0_col]))
