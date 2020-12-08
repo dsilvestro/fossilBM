@@ -175,16 +175,16 @@ runGibbs <- function(fbm_obj,sigma2, vector_tip_root_nodes_values,mu0, a0,get_ex
 	root_dist <- fbm_obj$dist_from_midpoint
 	
 	vec_values = vector_tip_root_nodes_values
-        # loop over Johnatan's tbl from most recent to root
-        for (i in dim(D)[1]:2){
-      	anc_ind <- D[i,1];
-      	a_ind   <- D[i,2];  # index of descendants
-      	b_ind   <- D[i,3];  # index of descendants
-      	vpa     <- D[i,4];  # br length
-      	vpb     <- D[i,5];  # br length
-      	anc = vec_values[anc_ind]
-      	a = vec_values[a_ind]
-      	b = vec_values[b_ind]	
+    # loop over Johnatan's tbl from most recent to root
+    for (i in dim(D)[1]:2){
+		anc_ind <- D[i,1];
+		a_ind   <- D[i,2];  # index of descendants
+		b_ind   <- D[i,3];  # index of descendants
+		vpa     <- D[i,4];  # br length
+		vpb     <- D[i,5];  # br length
+		anc = vec_values[anc_ind]
+		a = vec_values[a_ind]
+		b = vec_values[b_ind]	
 		# calibration prior
 		calibrated_prior_mu = prior_tbl[which(rownames(prior_tbl)==anc_ind),1]
 		calibrated_prior_s2 = prior_tbl[which(rownames(prior_tbl)==anc_ind),2]
@@ -1009,6 +1009,7 @@ plot_results <- function(fbm_obj, logfile, resfile="results.pdf" , exp_trait_dat
 	rbPal <- colorRampPalette(c("#2166ac","gray","#b2182b"))
 	# maximum color scale for trend 
 	xa <- max(abs(c (mu0_temp_mean)))+ (0.1* max(abs(c (mu0_temp_mean))))
+	if (xa==0){xa=0.01}
 	min_col <- -xa
 	max_col <- xa
 	beta_shape <- 0.5
