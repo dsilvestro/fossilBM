@@ -942,7 +942,7 @@ return(rr$par)
 
 
 
-plot_results <- function(fbm_obj, logfile, resfile="results.pdf" , exp_trait_data=0){	
+plot_results <- function(fbm_obj, logfile, resfile="results.pdf" , exp_trait_data=0, return_anc_states=FALSE){	
 	require(phytools)
 	require(methods)
 	library(scales)
@@ -1108,6 +1108,10 @@ plot_results <- function(fbm_obj, logfile, resfile="results.pdf" , exp_trait_dat
 	}
 
 	n<-dev.off()
+	if (return_anc_states==TRUE){
+		return(est_anc_states_mean_raw)
+	}
+		
 
 }
 
