@@ -1269,7 +1269,7 @@ get_r2_mse <-function(x,y){
 
 
 
-simulate_trait_data <- function(fbm_obj, sigma2=0.2, mu0=0, a0=0){
+simulate_trait_data <- function(fbm_obj, sigma2=0.2, mu0=0, a0=0, plot=F){
 	ntips	  <- fbm_obj$ntips
 	tree <- fbm_obj$tree
 	D		  <- fbm_obj$D
@@ -1300,8 +1300,10 @@ simulate_trait_data <- function(fbm_obj, sigma2=0.2, mu0=0, a0=0){
 		all_states[b_ind] <- rnorm(1, m2, s2)
 		
 	}
-	plot(-(max(root_dist)-root_dist), all_states, pch=16)
-    points(-(max(root_dist)-root_dist)[1:fbm_obj$ntips], all_states[1:fbm_obj$ntips], pch=16, col="red")
+	if (plot){
+		plot(-(max(root_dist)-root_dist), all_states, pch=16)
+	    points(-(max(root_dist)-root_dist)[1:fbm_obj$ntips], all_states[1:fbm_obj$ntips], pch=16, col="red")	
+	}
 	return(all_states)
 }	
 	
