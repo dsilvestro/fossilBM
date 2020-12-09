@@ -5,23 +5,33 @@ library(adephylo)
 
 
 
-read_and_transform_data <- function(treefile, datafile, rm_extinct=FALSE, tindex=1, drop_na=FALSE,
-	log_trait_data=0, rescale_trait_data=1,root_calibration=c(0,100),partition_file="",zero_br=0){
-	
-		t<- read.nexus(treefile)
-		if (class(t)=="phylo") { 
-			t <- t
-			t$edge.length <- t$edge.length + zero_br
-			original_simulated_tree <-t 
-			name_tag=""
-			} 
+read_and_transform_data <- function(treefile="", datafile="", tree_obj="", data_obj="",
+									rm_extinct=FALSE, tindex=1, drop_na=FALSE,
+									log_trait_data=0, rescale_trait_data=1,root_calibration=c(0,100),
+									partition_file="",zero_br=0){
+		
+		if (treefile != ""){
+			t<- read.nexus(treefile)
+			if (class(t)=="phylo") { 
+				t <- t
+				t$edge.length <- t$edge.length + zero_br
+				original_simulated_tree <-t 
+				name_tag=""
+				} 
 
-		if (class(t) == "multiPhylo") { 
-			t <- t[[tindex]]
-			original_simulated_tree <-t
+			if (class(t) == "multiPhylo") { 
+				t <- t[[tindex]]
+				original_simulated_tree <-t
+				t$edge.length <- t$edge.length + zero_br
+				name_tag=paste("_tree_",tindex, sep="")
+				} 
+		}
+		
+		if (tree_obj[1] != ""){
+			t = tree_obj
 			t$edge.length <- t$edge.length + zero_br
-			name_tag=paste("_tree_",tindex, sep="")
-			} 
+			name_tag=""
+		}
 
 		if (rm_extinct) {
 			name_tag = paste(name_tag,"_noFossil_",sep="")
@@ -33,7 +43,14 @@ read_and_transform_data <- function(treefile, datafile, rm_extinct=FALSE, tindex
 			} 
 
 		fbm_obj = NULL
-		trait <- read.table(datafile, header=F,row.names=1)
+		
+		if (datafile != ""){
+			trait <- read.table(datafile, header=F,row.names=1)
+		}
+		if (data_obj[1] != ""){
+			trait = data_obj
+		}
+		
 		if (drop_na){
 			trait <- na.omit(trait)
 		}
@@ -65,6 +82,16 @@ read_and_transform_data <- function(treefile, datafile, rm_extinct=FALSE, tindex
 		
 		return(fbm_obj)	
 }
+
+drop_extinct <- function(tree, rho=0.25){
+	dropRandomTaxa = 0.25
+	ex_tips <- getExtinct(tree)
+	rm_taxa= sample(ex_tips,size=round((1-rho) * length(ex_tips)))
+	tree <- drop.tip(tree, rm_taxa)
+	return(tree)
+}
+
+
 
 
 update_multiplier_proposal <- function(i,d){
@@ -668,9 +695,6 @@ run_mcmc <- function (fbm_obj,ngen = 100000, control = list(),useVCV=F, sample_f
 				m_ind  = sample(1:length(mu0),1)
 				mu0_update <-  mu0[m_ind] + rnorm(n = 1, sd = sd(fbm_obj$data, na.rm=T)*0.05)
 				if (linTrend){
-					#delta_a0 <- mu0-a0
-					#
-					#
 					a0_update <-  a0[m_ind] + rnorm(n = 1, sd = sd(fbm_obj$data, na.rm=T)*0.0005)
 					a0.prime[m_ind] = a0_update
 				}	
@@ -942,7 +966,7 @@ return(rr$par)
 
 
 
-plot_results <- function(fbm_obj, logfile, resfile="results.pdf" , exp_trait_data=0, return_anc_states=FALSE){	
+plot_results <- function(fbm_obj, logfile, resfile="results.pdf" , exp_trait_data=0, return_estimated_prm=FALSE){	
 	require(phytools)
 	require(methods)
 	library(scales)
@@ -1108,8 +1132,29 @@ plot_results <- function(fbm_obj, logfile, resfile="results.pdf" , exp_trait_dat
 	}
 
 	n<-dev.off()
-	if (return_anc_states==TRUE){
-		return(est_anc_states_mean_raw)
+	if (return_estimated_prm==TRUE){
+		
+		ind_a0_col = grep('a0_', colnames(out_tbl), value=F)
+		a0_temp_mean = (apply(out_tbl[burnin:dim(out_tbl)[1], ind_a0_col],FUN=mean,2))
+		a0_min = apply(X=out_tbl[burnin:dim(out_tbl)[1], ind_a0_col],FUN=quantile, probs=0.025,2)
+		a0_max = apply(X=out_tbl[burnin:dim(out_tbl)[1], ind_a0_col],FUN=quantile, probs=0.975,2)
+		
+		ind_anc_col = grep('anc_', colnames(out_tbl), value=F)[1]
+		root_state_mean = mean(out_tbl[burnin:dim(out_tbl)[1], ind_anc_col])
+		root_state_min = quantile(out_tbl[burnin:dim(out_tbl)[1], ind_anc_col], probs=0.025,2)
+		root_state_max = quantile(out_tbl[burnin:dim(out_tbl)[1], ind_anc_col], probs=0.975,2)
+		
+		
+		prm = c(unique(rates_temp_mean), unique(rates_min),unique(rates_max),
+		unique(mu0_temp_mean), unique(mu0_min), unique(mu0_max), 
+		unique(a0_temp_mean), unique(a0_min), unique(a0_max),
+		root_state_mean,root_state_min,root_state_max)
+		
+		res = list()
+		res[[1]] <- est_anc_states_mean_raw
+		res[[2]] <- prm
+		
+		return(res)
 	}
 		
 
@@ -1215,3 +1260,48 @@ plot_time_varying_trend <- function(fbm_obj, logfile, resfile="trends.pdf"){
 	
 }
 
+
+get_r2_mse <-function(x,y){
+	r2 = summary(lm(y~x))$r.squared
+	mse = mean((y-x)^2) # mean square error
+	return(c(r2, mse))
+}
+
+
+
+simulate_trait_data <- function(fbm_obj, sigma2=0.2, mu0=0, a0=0){
+	ntips	  <- fbm_obj$ntips
+	tree <- fbm_obj$tree
+	D		  <- fbm_obj$D
+	prior_tbl  <- fbm_obj$prior_tbl
+	root_dist <- fbm_obj$dist_from_the_root
+    dist_from_midpoint <- fbm_obj$dist_from_the_root
+	
+	root_state = 0
+	all_states = rep(root_state, (ntips*2-1))
+	
+	for (indx in (ntips+1):(ntips*2-1)){
+		
+		i = which(D[,1]==indx)
+		
+		anc_ind <- D[i,1];
+		a_ind   <- D[i,2];  # index of descendants
+		b_ind   <- D[i,3];  # index of descendants
+		vpa	 <- D[i,4];  # br length
+		vpb	 <- D[i,5];  # br length
+		anc = all_states[anc_ind]
+
+		m1 <- anc + (vpa*mu0 + a0*vpa*dist_from_midpoint[a_ind])
+		s1 <- sqrt((vpa)*sigma2)
+		m2 <- anc + (vpb*mu0 + a0*vpb*dist_from_midpoint[b_ind])
+		s2 <- sqrt((vpb)*sigma2)
+		
+		all_states[a_ind] <- rnorm(1, m1, s1)
+		all_states[b_ind] <- rnorm(1, m2, s2)
+		
+	}
+	plot(-(max(root_dist)-root_dist), all_states, pch=16)
+    points(-(max(root_dist)-root_dist)[1:fbm_obj$ntips], all_states[1:fbm_obj$ntips], pch=16, col="red")
+	return(all_states)
+}	
+	
