@@ -685,7 +685,7 @@ run_mcmc <- function (fbm_obj,ngen = 100000, control = list(),useVCV=F, sample_f
 		
 		update_sig_freq=0.5
 		if (rr[1]<update_sig_freq) {
-			if (rr[2]< 0.33){ # SIG2 UPDATE
+			if (rr[2]< 0.33 && i > 100){ # SIG2 UPDATE
 				s_ind  = sample(1:length(sig2),1)
 				sig2_update <-  update_multiplier_proposal(sig2.prime[s_ind],1.2)
 				sig2.prime[s_ind] = sig2_update[1]
@@ -693,8 +693,13 @@ run_mcmc <- function (fbm_obj,ngen = 100000, control = list(),useVCV=F, sample_f
 			}
 			else if (rr[2]<0.66 && useTrend==T){ # MU0 UPDATE
 				m_ind  = sample(1:length(mu0),1)
-				mu0_update <-  mu0[m_ind] + rnorm(n = 1, sd = sd(fbm_obj$data, na.rm=T)*0.05)
+				mu0_update <-  mu0[m_ind] + rnorm(n = 1, sd = sd(fbm_obj$data, na.rm=T)*0.025)
 				if (linTrend){
+					# update diff
+					# r_diff = mu0[m_ind] - a0[m_ind]
+					# r_diff_update <- r_diff + rnorm(n = 1, sd = sd(fbm_obj$data, na.rm=T)*0.0005)
+					# a0_update <- mu0_update - r_diff_update
+					# print(c(a0[m_ind], a0_update, r_diff_update, r_diff))
 					a0_update <-  a0[m_ind] + rnorm(n = 1, sd = sd(fbm_obj$data, na.rm=T)*0.0005)
 					a0.prime[m_ind] = a0_update
 				}	
