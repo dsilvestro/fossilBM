@@ -1274,7 +1274,10 @@ get_r2_mse <-function(x,y){
 
 
 
-simulate_trait_data <- function(fbm_obj, sigma2=0.2, mu0=0, a0=0, plot=F){
+simulate_trait_data <- function(fbm_obj, sigma2=0.2, mu0=0, a0=0, plot=F, seed=0, plot_file=""){
+	if (seed > 0){
+		set.seed(seed)
+	}
 	ntips	  <- fbm_obj$ntips
 	tree <- fbm_obj$tree
 	D		  <- fbm_obj$D
@@ -1284,6 +1287,7 @@ simulate_trait_data <- function(fbm_obj, sigma2=0.2, mu0=0, a0=0, plot=F){
 	
 	root_state = 0
 	all_states = rep(root_state, (ntips*2-1))
+	root_age = -max(root_dist)
 	
 	for (indx in (ntips+1):(ntips*2-1)){
 		
@@ -1303,11 +1307,48 @@ simulate_trait_data <- function(fbm_obj, sigma2=0.2, mu0=0, a0=0, plot=F){
 		
 		all_states[a_ind] <- rnorm(1, m1, s1)
 		all_states[b_ind] <- rnorm(1, m2, s2)
-		
+				
 	}
 	if (plot){
-		plot(-(max(root_dist)-root_dist), all_states, pch=16)
-	    points(-(max(root_dist)-root_dist)[1:fbm_obj$ntips], all_states[1:fbm_obj$ntips], pch=16, col="red")	
+		if (plot_file != ""){
+			pdf(file=plot_file, 8,8.5)
+		}
+		par(mar=c(2,4,1,1)*1.2)
+		par(fig=c(0,10,4,10)/10)
+		# plot(-(max(root_dist)-root_dist)[1:fbm_obj$ntips], all_states[1:fbm_obj$ntips],)
+		plot(NULL, xlim=c(root_age, 0), ylim=c(min(all_states), max(all_states)),
+			xlab="Time", ylab="Trait")
+		for (indx in (ntips+1):(ntips*2-1)){	
+			i = which(D[,1]==indx)
+			anc_ind <- D[i,1];
+			a_ind   <- D[i,2];  # index of descendants
+			b_ind   <- D[i,3];  # index of descendants
+			vpa	 <- D[i,4];  # br length
+			vpb	 <- D[i,5];  # br length
+			anc = all_states[anc_ind]
+			x0 = root_age + root_dist[anc_ind]
+			x1 = root_age + root_dist[a_ind]
+			segments(x0, anc, x1, all_states[a_ind])
+			x1 = root_age + root_dist[b_ind]
+			segments(x0, anc, x1, all_states[b_ind])
+		
+		}
+		t = seq(-root_age*0.5,root_age*0.5,length.out=100) - (root_age/2)
+		time_axis = seq(0,root_age,length.out=100)
+		
+		trend = a0*t + mu0
+		par(mar=c(4,4,1,1)*1.2)
+		par(fig=c(0,10,0,4)/10)
+		par(new=T)
+		
+		plot(NULL, xlim=c(root_age, 0), ylim=c(-1, 1), xlab="Time", ylab="Trend")
+		points(time_axis, trend, type="l")
+		abline(h=0,lty=2, col="red")
+		
+		if (plot_file != ""){
+			dev.off()
+		}
+		
 	}
 	return(all_states)
 }	
