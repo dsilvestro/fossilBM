@@ -997,13 +997,13 @@ plot_results <- function(fbm_obj, logfile, resfile="results.pdf" , exp_trait_dat
 	rates_temp_median = apply(out_tbl[burnin:dim(out_tbl)[1], ind_sig2_col],FUN=median,2)
 	rates_temp_mean = apply(out_tbl[burnin:dim(out_tbl)[1], ind_sig2_col],FUN=mean,2)
 	estK_all =out_tbl$K_sig2[burnin:dim(out_tbl)[1]]
-	h=hist(estK_all, breaks=0:max(estK_all)+0.5,plot=F)
-	best_K = which(h$counts==max(h$counts))
+	h_rate=hist(estK_all, breaks=0:max(estK_all)+0.5,plot=F)
+	best_K = which(h_rate$counts==max(h_rate$counts))
 	estK = round(quantile(estK_all,probs = c(0.025,0.975)))
 	rates_min = apply(X=out_tbl[burnin:dim(out_tbl)[1], ind_sig2_col],FUN=quantile, probs=0.025,2)
 	rates_max = apply(X=out_tbl[burnin:dim(out_tbl)[1], ind_sig2_col],FUN=quantile, probs=0.975,2)
 
-	par(mfcol=c(3,2))
+	par(mfcol=c(2,1))
 
 	temp<-log(rates_temp_mean) + max(abs(log(rates_temp_mean))) + 0.5
 
@@ -1014,13 +1014,6 @@ plot_results <- function(fbm_obj, logfile, resfile="results.pdf" , exp_trait_dat
 	names(col)=c(1:length(tree$edge.length))
 	plot.phylo(tree, edge.width=temp, main=paste("Estimated rates,",sprintf("K: %s (%s-%s)",best_K,estK[1],estK[2])),show.tip.label = T, cex=0.6, align.tip.label=T)
 
-	C = h$counts
-	names(C) = 1:max(estK_all)
-	barplot(C,main="Estimated number of shifts - Sig2")
-
-	plot(rates_temp_mean,  main=paste("sig2s, ", sprintf("K: %s (%s-%s)",best_K,estK[1],estK[2])),pch=21,col="darkblue",bg="blue", ylim=c(min(rates_min)*0.5,max(rates_max)*1.5),type="n")
-	points(rates_temp_mean,pch=21,col="darkred",bg="red")
-	segments(x0= 1:length(rates_min), y0=rates_min, x1=1:length(rates_min), y1=rates_max,col=alpha("darkred",0.4),lwd=2)
 
 
 	# Trends section
@@ -1056,6 +1049,15 @@ plot_results <- function(fbm_obj, logfile, resfile="results.pdf" , exp_trait_dat
 	col.labels<-c(format(min_col, digits = 4), "","0","", format(max_col, digits = 4))
   	limit_plot<-max(axisPhylo())
   	color.legend(0,0.15,0+(limit_plot)/10,25,col.labels,rect.col=testcol, gradient="y", cex=0.8, align="lt")
+
+    par(mfrow=c(3,2))
+	C = h_rate$counts
+	names(C) = 1:max(estK_all)
+	barplot(C,main="Estimated number of shifts - Sig2")
+
+	plot(rates_temp_mean,  main=paste("sig2s, ", sprintf("K: %s (%s-%s)",best_K,estK[1],estK[2])),pch=21,col="darkblue",bg="blue", ylim=c(min(rates_min)*0.5,max(rates_max)*1.5),type="n")
+	points(rates_temp_mean,pch=21,col="darkred",bg="red")
+	segments(x0= 1:length(rates_min), y0=rates_min, x1=1:length(rates_min), y1=rates_max,col=alpha("darkred",0.4),lwd=2)
 
 	C = h$counts
 	names(C) = 1:max(estKmu0_all)
