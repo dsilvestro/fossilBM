@@ -273,6 +273,10 @@ calc_prior <- function(sig2, a, y, mu0, delta_a0, prior_tbl) {
 }
 
 set_model_partitions <- function(fbm_obj,ind_sig2,ind_mu0){
+	ind_sig2 <- rep(1, fbm_obj$tree$Nnode * 2 - 1)
+	ind_mu0  <- rep(1, fbm_obj$tree$Nnode * 2 - 1)
+	
+	
 	tbl = read.table(fbm_obj$PartitionFile,h=F,stringsAsFactors=F,fill=T)
 	for (i in 1:dim(tbl)[1]){
 		tx_tmp = as.vector(unlist(tbl[i,]))
@@ -529,7 +533,8 @@ run_BDMCMC <- function(fbm_obj, trait_states, sig2, ind_sig, mu0, ind_mu0, a0 ,I
 ################################## START MCMC ###################################
 run_mcmc <- function (fbm_obj,ngen = 100000, control = list(),useVCV=F, sample_f=250,
 	                logfile="mcmc.log",update_sig_freq=0.5,dynamicPlot = F,
-	                bdmcmc_freq=0.75,useTrend=T,print_freq=100,constRate=F,linTrend=F){
+	                bdmcmc_freq=0.75,useTrend=T,print_freq=100,constRate=F,linTrend=F,
+					per_branch_parameters=TRUE, log_anc_states=TRUE){
 					
 	tree <-      fbm_obj$tree
 	x <-         fbm_obj$data
@@ -572,7 +577,8 @@ run_mcmc <- function (fbm_obj,ngen = 100000, control = list(),useVCV=F, sample_f
 		mu0       <- res_part[[2]]
 		a0        <- res_part[[3]]
 		ind_sig2  <- res_part[[4]]
-		ind_mu0   <- res_part[[5]]		
+		ind_mu0   <- res_part[[5]]	
+		part_ids <- sort(unique(ind_sig2))	
 	}
 
 	#names(ind_sig2) = c(names(x), D[-1,1])
@@ -588,11 +594,26 @@ run_mcmc <- function (fbm_obj,ngen = 100000, control = list(),useVCV=F, sample_f
 	brl_NAtaxa_in_D               = c()
 	anc_node_of_NAtaxa            = c()
 	anc_state_anc_node_of_NAtaxa  = c()
-
-	cat(c("it", "posterior","likelihood","prior", "sig2", "mu0","a0","K_sig2","K_mu0", 
-		paste("sig2", 1:length(TE[,1]),sep="_"),paste("mu0", 1:length(TE[,1]),sep="_"),
-		paste("a0", 1:length(TE[,1]),sep="_"), 
-		paste("anc",D[,1],sep="_"), tree$tip.label[ind_NA_taxa],"\n"),sep="\t", file=logfile, append=F)
+	
+	if (per_branch_parameters){
+		out_tmp = c("it", "posterior","likelihood","prior", "sig2", "mu0","a0","K_sig2","K_mu0", 
+			paste("sig2", 1:length(TE[,1]),sep="_"),paste("mu0", 1:length(TE[,1]),sep="_"),
+			paste("a0", 1:length(TE[,1]),sep="_")) 
+		}else{
+			out_tmp = c("it", "posterior","likelihood","prior", "sig2", "mu0","a0")
+			if (PartitionFile != ""){
+				out_tmp = c(out_tmp,
+				paste("sig2", part_ids, sep="_"),paste("mu0", part_ids,sep="_"),
+				paste("a0", part_ids,sep="_"))
+			}
+		}
+	if (log_anc_states){
+		out_tmp = c(out_tmp, paste("anc",D[,1],sep="_"), tree$tip.label[ind_NA_taxa])
+	}else{
+		out_tmp = c(out_tmp, "root", tree$tip.label[ind_NA_taxa])
+	}
+	cat(c(out_tmp, "\n"), sep="\t", file=logfile, append=F)
+	
 	
 	for (tax in 1:length(ind_NA_taxa)){
 		ind_NAtaxa_in_D = c(ind_NAtaxa_in_D,   which(D[,2] == ind_NA_taxa[tax]),      which(D[,3] == ind_NA_taxa[tax]))
@@ -781,11 +802,28 @@ run_mcmc <- function (fbm_obj,ngen = 100000, control = list(),useVCV=F, sample_f
 		}
  
 	     if (i %% sample_f == 0) {
-			rates_temp=sig2[ind_sig2]
-			trends_temp=mu0[ind_mu0]
-			trend_trends = a0[ind_mu0]
-			cat(c(i,sum(L)+sum(Pr), sum(L),sum(Pr), mean(sig2[ind_sig2]),mean(mu0[ind_mu0]),mean(a0[ind_mu0]), length(sig2),length(mu0), 
-				rates_temp[IND_edge],trends_temp[IND_edge],trend_trends[IND_edge], a, y, x_imputed, "\n"),sep="\t", file=logfile, append=T) 
+ 			rates_temp=sig2[ind_sig2]
+ 			trends_temp=mu0[ind_mu0]
+ 			trend_trends = a0[ind_mu0]
+			
+			if (log_anc_states){
+				anc_tmp = c(a, y)
+			}else{
+				anc_tmp = c(a)
+			}
+			
+			 if (per_branch_parameters){
+	 			cat(c(i,sum(L)+sum(Pr), sum(L),sum(Pr), mean(rates_temp),mean(trends_temp),mean(trend_trends), length(sig2),length(mu0), 
+	 				rates_temp[IND_edge],trends_temp[IND_edge],trend_trends[IND_edge], anc_tmp, x_imputed, "\n"),sep="\t", file=logfile, append=T) 			 	
+			 }else{
+				if (PartitionFile != ""){
+					prm_tmp = c(sig2, mu0, a0)
+				}else{
+					prm_tmp = c()
+				}
+ 	 			cat(c(i,sum(L)+sum(Pr), sum(L),sum(Pr), mean(rates_temp),mean(trends_temp),mean(trend_trends), prm_tmp,
+ 	 				anc_tmp, x_imputed, "\n"),sep="\t", file=logfile, append=T) 			 	
+			 }
 			#print(x[ind_NA_taxa])
 	    }
     
@@ -986,7 +1024,6 @@ plot_results <- function(fbm_obj, logfile, resfile="results.pdf" , exp_trait_dat
 	ntips <- fbm_obj$ntips
 	data <- fbm_obj$data
 	rescale_trait_data <- fbm_obj$trait_rescaling
-	
 	
 	sp_with_missing_data = names(data[which(is.na(data))])
 	phylo_imputation_data <- out_tbl[sp_with_missing_data]

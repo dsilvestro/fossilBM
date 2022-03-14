@@ -1,0 +1,5 @@
+Alouatta_belzebul	Saimiri_ustus
+Alouatta_belzebul	Alouatta_pigra
+Saguinus_nigricollis	Saguinus_bicolor
+Cacajao_ayresi	Callicebus_torquatus
+Cacajao_ayresi	Cacajao_calvus
