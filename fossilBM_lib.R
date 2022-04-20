@@ -8,7 +8,8 @@ library(adephylo)
 read_and_transform_data <- function(treefile="", datafile="", tree_obj="", data_obj="",
 									rm_extinct=FALSE, tindex=1, drop_na=FALSE,
 									log_trait_data=0, rescale_trait_data=1,root_calibration=c(0,100),
-									partition_file="",zero_br=0){
+									partition_file="",zero_br=0, dist_from_the_root=c(),
+                                    state_tbl=c()){
 		
 		if (treefile != ""){
 			t<- read.nexus(treefile)
@@ -46,8 +47,7 @@ read_and_transform_data <- function(treefile="", datafile="", tree_obj="", data_
 		
 		if (datafile != ""){
 			trait <- read.table(datafile, header=F,row.names=1)
-		}
-		if (data_obj[1] != ""){
+		}else{
 			trait = data_obj
 		}
 		
@@ -74,11 +74,16 @@ read_and_transform_data <- function(treefile="", datafile="", tree_obj="", data_
 		fbm_obj$ntips <- tree$Nnode+1
 		fbm_obj$D <- build_table(tree, fbm_obj$ntips,fbm_obj$data)
 		BR <- branching.times(tree) # sorted from root to most recent
-		fbm_obj$dist_from_the_root <- c(distRoot(fbm_obj$tree,tips="all",method =c( "patristic")), max(BR)-BR)
+        if (length(dist_from_the_root) == 0){
+            fbm_obj$dist_from_the_root <- c(distRoot(fbm_obj$tree,tips="all",method =c( "patristic")), max(BR)-BR)
+        }else{
+            fbm_obj$dist_from_the_root = dist_from_the_root
+        }
 		fbm_obj$dist_from_midpoint <- fbm_obj$dist_from_the_root - 0.5*max(fbm_obj$dist_from_the_root)
 		fbm_obj$prior_tbl <- get_calibration_tbl(fbm_obj$D,root_calibration)
 		fbm_obj$PartitionFile <- partition_file
 		fbm_obj$trait_rescaling <- rescale_trait_data
+        fbm_obj$StateTbl = state_tbl
 		
 		return(fbm_obj)	
 }
@@ -293,6 +298,16 @@ set_model_partitions <- function(fbm_obj,ind_sig2,ind_mu0){
 	a0  <-  rep(0,   1+dim(tbl)[1])
 	return( list(sig2, mu0, a0, ind_sig2, ind_mu0) )
 }
+
+
+set_model_trait_partitions <- function(fbm_obj){
+	ind_mu0  <- fbm_obj$StateTbl[,2]
+	mu0  <- rep(0, length(unique(ind_mu0)))
+	a0  <-  rep(0, length(unique(ind_mu0)))
+	return( list(mu0, a0, ind_mu0) )
+}
+
+
 
 
 ################ BDMCMC SAMPLER
@@ -579,8 +594,19 @@ run_mcmc <- function (fbm_obj,ngen = 100000, control = list(),useVCV=F, sample_f
 		ind_sig2  <- res_part[[4]]
 		ind_mu0   <- res_part[[5]]	
 		part_ids <- sort(unique(ind_sig2))	
+        part_mu_ids <- part_ids
 	}
 
+
+    if (length(fbm_obj$StateTbl) > 0){
+        r_tmp <- set_model_trait_partitions(fbm_obj)
+        mu0 <- r_tmp[[1]]
+        a0 <- r_tmp[[2]]
+        ind_mu0 <- r_tmp[[3]]
+        part_mu_ids <- sort(unique(ind_mu0))	
+        
+        print(head(ind_mu0))
+    }
 	#names(ind_sig2) = c(names(x), D[-1,1])
 
 	x <- x[tree$tip.label]
@@ -603,8 +629,8 @@ run_mcmc <- function (fbm_obj,ngen = 100000, control = list(),useVCV=F, sample_f
 			out_tmp = c("it", "posterior","likelihood","prior", "sig2", "mu0","a0")
 			if (PartitionFile != ""){
 				out_tmp = c(out_tmp,
-				paste("sig2", part_ids, sep="_"),paste("mu0", part_ids,sep="_"),
-				paste("a0", part_ids,sep="_"))
+				paste("sig2", part_ids, sep="_"),paste("mu0", part_mu_ids,sep="_"),
+				paste("a0", part_mu_ids,sep="_"))
 			}
 		}
 	if (log_anc_states){
@@ -706,9 +732,9 @@ run_mcmc <- function (fbm_obj,ngen = 100000, control = list(),useVCV=F, sample_f
 		
 		update_sig_freq=0.5
 		if (rr[1]<update_sig_freq) {
-			if (rr[2]< 0.33 && i > 100){ # SIG2 UPDATE
+			if (rr[2]< 0.33 && i > 50){ # SIG2 UPDATE
 				s_ind  = sample(1:length(sig2),1)
-				sig2_update <-  update_multiplier_proposal(sig2.prime[s_ind],1.2)
+				sig2_update <-  update_multiplier_proposal(sig2.prime[s_ind],1.05)
 				sig2.prime[s_ind] = sig2_update[1]
 				hastings = sig2_update[2]			
 			}
