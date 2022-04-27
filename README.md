@@ -9,7 +9,8 @@ The algorithm simultaneously estimates:
 3. the ancestral states at all internal nodes
 
 
-The methods implemented here are described in Silvestro, Tejedor, et al. ([Systematic Biology, 2018](https://doi.org/10.1093/sysbio/syy046)).
+The methods implemented here are described in [Silvestro et al. 2018 Systematic Biology](https://doi.org/10.1093/sysbio/syy046).
+The BM model with time-varying trend is described in [Zhang et al. 2022 Systematic Biology](https://doi.org/10.1093/sysbio/syab065).  
   
 
 #### NOTE
