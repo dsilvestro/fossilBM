@@ -9,7 +9,7 @@ read_and_transform_data <- function(treefile="", datafile="", tree_obj="", data_
 									rm_extinct=FALSE, tindex=1, drop_na=FALSE,
 									log_trait_data=0, rescale_trait_data=1,root_calibration=c(0,100),
 									partition_file="",zero_br=0, dist_from_the_root=c(),
-                                    state_tbl=c()){
+                                    state_tbl=c(), z_tranform=FALSE){
 		
 		if (treefile != ""){
 			t<- read.nexus(treefile)
@@ -85,6 +85,14 @@ read_and_transform_data <- function(treefile="", datafile="", tree_obj="", data_
 		fbm_obj$trait_rescaling <- rescale_trait_data
         fbm_obj$StateTbl = state_tbl
 		
+        if (z_tranform){
+            fbm_obj$original_data <- fbm_obj$data
+            fbm_obj$z_sd <- sd(fbm_obj$data, na.rm=T)
+            fbm_obj$data <- fbm_obj$data / fbm_obj$z_sd 
+            fbm_obj$z_mean <- mean(fbm_obj$data, na.rm=T)
+            fbm_obj$data <- fbm_obj$data - fbm_obj$z_mean 
+        }
+        
 		return(fbm_obj)	
 }
 
