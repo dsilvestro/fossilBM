@@ -277,10 +277,10 @@ runGibbs <- function(fbm_obj,sigma2, vector_tip_root_nodes_values,mu0, a0,get_ex
 	return(vec_values[D[,1]] )
 }
 
-calc_prior <- function(sig2, a, y, mu0, delta_a0, prior_tbl, sd_mu0) {
-	prior_sig2 = sum(dexp(sig2, 0.5, log = TRUE) ) #sum(dgamma(sig2, 2,1, log = TRUE) )
+calc_prior <- function(sig2, a, y, mu0, delta_a0, prior_tbl, rate_sig2, sd_mu0) {
+	prior_sig2 = sum(dexp(sig2, rate_sig2, log = TRUE) ) #sum(dgamma(sig2, 2,1, log = TRUE) )
 	prior_root = sum(dnorm(c(a), mean = prior_tbl[,1], sd = prior_tbl[,2], log = T))
-	prior_mu0  = sum(dnorm(mu0, mean = 0, sd = sd_mu0, log = T))
+	prior_mu0  = sum(dnorm(mu0[mu0 != 0], mean = 0, sd = sd_mu0, log = T)) # ignore mu0 constrained to 0
 	prior_da0  = sum(dnorm(delta_a0, mean = 0, sd = 1, log = T))
 	return(prior_sig2+prior_root+prior_mu0+prior_da0)
 }
@@ -558,7 +558,7 @@ run_mcmc <- function (fbm_obj,ngen = 100000, control = list(),useVCV=F, sample_f
 	                logfile="mcmc.log",update_sig_freq=0.5,dynamicPlot = F,
 	                bdmcmc_freq=0.75,useTrend=T,print_freq=100,constRate=F,linTrend=F,
 					per_branch_parameters=TRUE, log_anc_states=TRUE, 
-                    update_mu0=c(), estimate_HP=FALSE){
+                    update_mu0=c(), estimate_HP=FALSE, rate_trend_hp=1){
 					
 	tree <-      fbm_obj$tree
 	x <-         fbm_obj$data
@@ -623,10 +623,9 @@ run_mcmc <- function (fbm_obj,ngen = 100000, control = list(),useVCV=F, sample_f
     x_tmp = as.vector(table(ind_mu0))
     scaler_w = 1/(1 + log(x_tmp- min(x_tmp) +1))
     std_mu0 <- sd(fbm_obj$data, na.rm=T)*0.025 * scaler_w
+    rate_sig2 <- 0.5
     print(c("std_mu0", std_mu0))
-    
-    
-    
+        
     fbm_obj$ind_sig2 = ind_sig2
     fbm_obj$ind_mu0 = ind_mu0
     
@@ -661,10 +660,12 @@ run_mcmc <- function (fbm_obj,ngen = 100000, control = list(),useVCV=F, sample_f
 		out_tmp = c(out_tmp, "root", tree$tip.label[ind_NA_taxa])
 	}
     if (estimate_HP){
-        out_tmp <- c(out_tmp, "mu0_hp")
+        out_tmp <- c(out_tmp, "sig2_hp","mu0_hp")
     }
-    
-	cat(c(out_tmp, "\n"), sep="\t", file=logfile, append=F)
+    if (logfile != 0){
+        cat(c(out_tmp, "\n"), sep="\t", file=logfile, append=F)
+    }
+	
 	
 	
 	for (tax in 1:length(ind_NA_taxa)){
@@ -688,9 +689,10 @@ run_mcmc <- function (fbm_obj,ngen = 100000, control = list(),useVCV=F, sample_f
 	L   <- newlnLike(fbm_obj, c(x, a, y), sig2[ind_sig2],mu0[ind_mu0],a0[ind_mu0])
     print(c("LIKELIHOOD:", sum(L), length(L), a, y[1:3], sig2, mu0,sum(ind_sig2), sum(ind_mu0)))
     sd_mu0 = 0.1 
-	Pr <- calc_prior(sig2, a, y,mu0, a0, prior_tbl, sd_mu0)
+	Pr <- calc_prior(sig2, a, y,mu0, a0, prior_tbl, rate_sig2, sd_mu0)
     if (estimate_HP){
-        Pr <- Pr + dexp(sd_mu0, 1, log=T) # add HP probability
+        Pr <- Pr + dexp(sd_mu0, rate_trend_hp, log=T) # add HP probability
+        Pr <- Pr + dexp(rate_sig2, 1, log=T)
     }
 	
 	# get indexes
@@ -732,6 +734,7 @@ run_mcmc <- function (fbm_obj,ngen = 100000, control = list(),useVCV=F, sample_f
 		mu0.prime   = mu0
 		a0.prime    = a0
         sd_mu0.prime = sd_mu0
+        rate_sig2.prime = rate_sig2
 		gibbs=0
 		hastings=0
     	    	
@@ -792,8 +795,11 @@ run_mcmc <- function (fbm_obj,ngen = 100000, control = list(),useVCV=F, sample_f
 				a.prime <- a + rnorm(n = 1, sd = 0.5) #sqrt(con$prop[j + 1]))
                 if (estimate_HP){
     				sd_mu0_update <-  update_multiplier_proposal(sd_mu0, 1.05)
-                    hastings <- hastings + sd_mu0_update[2]
     				sd_mu0.prime <- sd_mu0_update[1]
+                    hastings <- hastings + sd_mu0_update[2]
+                    rate_sig2_update <- update_multiplier_proposal(rate_sig2, 1.05)
+                    rate_sig2.prime <- rate_sig2_update[1]
+                    hastings <- hastings + rate_sig2_update[2]
                 }
 			}
 			
@@ -852,9 +858,12 @@ run_mcmc <- function (fbm_obj,ngen = 100000, control = list(),useVCV=F, sample_f
 		
 	       # calc post
 		L.prime <- newlnLike(fbm_obj, c(x, a.prime, y.prime), sig2.prime[ind_sig2],mu0.prime[ind_mu0],a0.prime[ind_mu0])			
-		Pr.prime <- calc_prior(sig2.prime, a.prime, y.prime, mu0.prime, a0.prime, prior_tbl, sd_mu0.prime)
+		Pr.prime <- calc_prior(sig2.prime, a.prime, y.prime, mu0.prime, a0.prime, prior_tbl, rate_sig2.prime, sd_mu0.prime)
         if (estimate_HP){
-            Pr.prime <- Pr.prime + dexp(sd_mu0.prime, rate=1, log=T)
+            Pr.prime <- Pr.prime + dexp(sd_mu0.prime,
+                                        rate=rate_trend_hp, log=T)
+            Pr.prime <- Pr.prime + dexp(rate_sig2.prime, 1, log=T)
+                                        
         }
 		
         # print( c(sum(L.prime), sum(Pr.prime), sig2.prime, a.prime, mu0.prime, x[ind_NA_taxa], sum(Pr), sum(L)) )
@@ -869,6 +878,7 @@ run_mcmc <- function (fbm_obj,ngen = 100000, control = list(),useVCV=F, sample_f
 			mu0  = mu0.prime
 			a0   = a0.prime
             sd_mu0 = sd_mu0.prime
+            rate_sig2 = rate_sig2.prime
 		}
  
 	     if (i %% sample_f == 0) {
@@ -882,23 +892,27 @@ run_mcmc <- function (fbm_obj,ngen = 100000, control = list(),useVCV=F, sample_f
 				anc_tmp = c(a)
 			}
             if (estimate_HP){
-                x_imputed_looged = c(x_imputed, sd_mu0)
+                x_imputed_looged = c(x_imputed, rate_sig2, sd_mu0)
             }else{
                 x_imputed_looged = x_imputed
             }
             
 			
 			 if (per_branch_parameters){
-	 			cat(c(i,sum(L)+sum(Pr), sum(L),sum(Pr), mean(rates_temp),mean(trends_temp),mean(trend_trends), length(sig2),length(mu0), 
-	 				rates_temp[IND_edge],trends_temp[IND_edge],trend_trends[IND_edge], anc_tmp, x_imputed_looged, "\n"),sep="\t", file=logfile, append=T) 			 	
+                 if (logfile != 0){
+    	 			cat(c(i,sum(L)+sum(Pr), sum(L),sum(Pr), mean(rates_temp),mean(trends_temp),mean(trend_trends), length(sig2),length(mu0), 
+    	 				rates_temp[IND_edge],trends_temp[IND_edge],trend_trends[IND_edge], anc_tmp, x_imputed_looged, "\n"),sep="\t", file=logfile, append=T)
+                    }
 			 }else{
 				if (PartitionFile != ""){
 					prm_tmp = c(sig2, mu0, a0)
 				}else{
 					prm_tmp = c()
 				}
- 	 			cat(c(i,sum(L)+sum(Pr), sum(L),sum(Pr), mean(rates_temp),mean(trends_temp),mean(trend_trends), prm_tmp,
- 	 				anc_tmp, x_imputed_looged, "\n"),sep="\t", file=logfile, append=T) 			 	
+                if (logfile != 0){
+     	 			cat(c(i,sum(L)+sum(Pr), sum(L),sum(Pr), mean(rates_temp),mean(trends_temp),mean(trend_trends), prm_tmp,
+     	 				anc_tmp, x_imputed_looged, "\n"),sep="\t", file=logfile, append=T) 			 	                    
+                }
 			 }
 			#print(x[ind_NA_taxa])
 	    }
@@ -1390,7 +1404,9 @@ get_r2_mse <-function(x,y){
 
 
 
-simulate_trait_data <- function(fbm_obj, sigma2=0.2, mu0=0, a0=0, plot=F, seed=0, plot_file=""){
+simulate_trait_data <- function(fbm_obj, sigma2=0.2, mu0=0, a0=0, 
+                                plot=F, seed=0, plot_file=""
+                                ){
 	if (seed > 0){
 		set.seed(seed)
 	}
@@ -1404,6 +1420,12 @@ simulate_trait_data <- function(fbm_obj, sigma2=0.2, mu0=0, a0=0, plot=F, seed=0
 	root_state = 0
 	all_states = rep(root_state, (ntips*2-1))
 	root_age = -max(root_dist)
+    
+    # rate shifts
+    sigma2 <- sigma2[fbm_obj$ind_sig2]
+    mu0 <- mu0[fbm_obj$ind_sig2]
+    a0 <- a0[fbm_obj$ind_sig2]
+    
 	
 	for (indx in (ntips+1):(ntips*2-1)){
 		
@@ -1415,16 +1437,27 @@ simulate_trait_data <- function(fbm_obj, sigma2=0.2, mu0=0, a0=0, plot=F, seed=0
 		vpa	 <- D[i,4];  # br length
 		vpb	 <- D[i,5];  # br length
 		anc = all_states[anc_ind]
-
-		m1 <- anc + (vpa*mu0 + a0*vpa*dist_from_midpoint[a_ind])
-		s1 <- sqrt((vpa)*sigma2)
-		m2 <- anc + (vpb*mu0 + a0*vpb*dist_from_midpoint[b_ind])
-		s2 <- sqrt((vpb)*sigma2)
+        
+    	anc_ind_v <- D[i,1]
+    	a_ind_v   <- D[i,2]
+    	b_ind_v   <- D[i,3]
+    	a_ind_v[a_ind_v>ntips] =a_ind_v[a_ind_v>ntips]-1
+    	b_ind_v[b_ind_v>ntips] =b_ind_v[b_ind_v>ntips]-1
+        
+        
+        
+		m1 <- anc + (vpa*mu0[a_ind_v] + a0[a_ind_v]*vpa*dist_from_midpoint[a_ind])
+		s1 <- sqrt((vpa)*sigma2[a_ind_v])
+		m2 <- anc + (vpb*mu0[b_ind_v] + a0[b_ind_v]*vpb*dist_from_midpoint[b_ind])
+		s2 <- sqrt((vpb)*sigma2[b_ind_v])
 		
+        # cat(c("\n", round(indx), round(i),  m1, s1, m2, s2, "\n"))
+        # print(all_states)
 		all_states[a_ind] <- rnorm(1, m1, s1)
 		all_states[b_ind] <- rnorm(1, m2, s2)
 				
 	}
+    
 	if (plot){
 		if (plot_file != ""){
 			pdf(file=plot_file, 8,8.5)
