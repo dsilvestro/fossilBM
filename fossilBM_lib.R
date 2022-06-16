@@ -296,7 +296,7 @@ set_model_partitions <- function(fbm_obj,ind_sig2,ind_mu0){
 		tx = tx_tmp[tx_tmp != ""]
 		mrca = getMRCA(fbm_obj$tree, tx)
 		desc = getDescendants(fbm_obj$tree, mrca)
-		desc[desc>fbm_obj$ntips] = desc[desc>fbm_obj$ntips]-1
+		desc[desc > fbm_obj$ntips] = desc[desc > fbm_obj$ntips] - 1
 		ind_sig2[desc] = i+1
 		ind_mu0[desc] = i+1
 	}
@@ -310,6 +310,8 @@ set_model_partitions <- function(fbm_obj,ind_sig2,ind_mu0){
 
 set_model_trait_partitions <- function(fbm_obj){
 	ind_mu0  <- fbm_obj$StateTbl[,2]
+    
+    
 	mu0  <- rep(0, length(unique(ind_mu0)))
 	a0  <-  rep(0, length(unique(ind_mu0)))
 	return( list(mu0, a0, ind_mu0) )
@@ -558,7 +560,8 @@ run_mcmc <- function (fbm_obj,ngen = 100000, control = list(),useVCV=F, sample_f
 	                logfile="mcmc.log",update_sig_freq=0.5,dynamicPlot = F,
 	                bdmcmc_freq=0.75,useTrend=T,print_freq=100,constRate=F,linTrend=F,
 					per_branch_parameters=TRUE, log_anc_states=TRUE, 
-                    update_mu0=c(), estimate_HP=FALSE, rate_trend_hp=1){
+                    update_mu0=c(), estimate_HP=FALSE, rate_trend_hp=1,
+                    init_mu0=c()){
 					
 	tree <-      fbm_obj$tree
 	x <-         fbm_obj$data
@@ -616,6 +619,11 @@ run_mcmc <- function (fbm_obj,ngen = 100000, control = list(),useVCV=F, sample_f
         
         print(head(ind_mu0))
     }
+    
+    if (length(init_mu0) > 0){
+        mu0 = init_mu0
+    }
+    
 	#names(ind_sig2) = c(names(x), D[-1,1])
     print(table(ind_sig2))
     print(table(ind_mu0))
@@ -1171,7 +1179,7 @@ plot_results <- function(fbm_obj, logfile, resfile="results.pdf" , exp_trait_dat
 	names(edge_cols) <- order(mu0_temp_mean)
 	edge_cols <- edge_cols [order(as.numeric(names(edge_cols)))]
 	names(edge_cols)<- NULL
-	plot.phylo(tree, edge.width=2, main=paste("Estimated trends,",sprintf("K: %s (%s-%s)",best_K,estK[1],estK[2])),show.tip.label = T, cex=0.1, edge.color=edge_cols)
+	plot.phylo(tree, edge.width=1, main=paste("Estimated trends,",sprintf("K: %s (%s-%s)",best_K,estK[1],estK[2])),show.tip.label = T, cex=0.1, edge.color=edge_cols)
 	testcol<-rbPal(n=length(breaksList))
 
 	col.labels<-c(format(min_col, digits = 4), "","0","", format(max_col, digits = 4))
@@ -1405,7 +1413,7 @@ get_r2_mse <-function(x,y){
 
 
 simulate_trait_data <- function(fbm_obj, sigma2=0.2, mu0=0, a0=0, 
-                                plot=F, seed=0, plot_file=""
+                                plot=F, seed=0, plot_file="",color_by_mu0=T
                                 ){
 	if (seed > 0){
 		set.seed(seed)
@@ -1423,8 +1431,8 @@ simulate_trait_data <- function(fbm_obj, sigma2=0.2, mu0=0, a0=0,
     
     # rate shifts
     sigma2 <- sigma2[fbm_obj$ind_sig2]
-    mu0 <- mu0[fbm_obj$ind_sig2]
-    a0 <- a0[fbm_obj$ind_sig2]
+    mu0 <- mu0[fbm_obj$ind_mu0]
+    a0 <- a0[fbm_obj$ind_mu0]
     
 	
 	for (indx in (ntips+1):(ntips*2-1)){
@@ -1437,13 +1445,17 @@ simulate_trait_data <- function(fbm_obj, sigma2=0.2, mu0=0, a0=0,
 		vpa	 <- D[i,4];  # br length
 		vpb	 <- D[i,5];  # br length
 		anc = all_states[anc_ind]
-        
+        if (is.na(sum(all_states))){break}
     	anc_ind_v <- D[i,1]
     	a_ind_v   <- D[i,2]
     	b_ind_v   <- D[i,3]
-    	a_ind_v[a_ind_v>ntips] =a_ind_v[a_ind_v>ntips]-1
-    	b_ind_v[b_ind_v>ntips] =b_ind_v[b_ind_v>ntips]-1
         
+        if (a_ind_v > ntips){
+            a_ind_v <- a_ind_v -1
+        }
+        if (b_ind_v > ntips){
+            b_ind_v <- b_ind_v -1
+        }
         
         
 		m1 <- anc + (vpa*mu0[a_ind_v] + a0[a_ind_v]*vpa*dist_from_midpoint[a_ind])
@@ -1460,13 +1472,36 @@ simulate_trait_data <- function(fbm_obj, sigma2=0.2, mu0=0, a0=0,
     
 	if (plot){
 		if (plot_file != ""){
-			pdf(file=plot_file, 8,8.5)
+			pdf(file=plot_file, 18,8.5)
 		}
-		par(mar=c(2,4,1,1)*1.2)
-		par(fig=c(0,10,4,10)/10)
+        if (sum(a0) > 0){
+    		par(mar=c(2,4,1,1)*1.2)
+    		par(fig=c(0,10,4,10)/10)            
+        }
+        
+        if (color_by_mu0){
+        	rbPal <- colorRampPalette(c("#2166ac","gray","#b2182b"))
+        	# maximum color scale for trend 
+        	xa <- max(abs(c (mu0)))+ (0.1* max(abs(c (mu0))))
+        	if (xa==0){xa=0.01}
+        	min_col <- -xa
+        	max_col <- xa
+        	beta_shape <- 0.5
+        	test<- qbeta(seq(0,1, by=0.05), beta_shape, beta_shape, lower.tail = TRUE, log.p = FALSE)
+        	x = test * (max_col-min_col) 
+        	breaksList = x + min_col
+        	edge_cols <- rbPal(length(breaksList))[as.numeric(cut(sort(mu0),breaks = breaksList))]
+        	names(edge_cols) <- order(mu0)
+        	edge_cols <- edge_cols [order(as.numeric(names(edge_cols)))]
+        	names(edge_cols)<- NULL
+            
+        }
+        
+        
 		# plot(-(max(root_dist)-root_dist)[1:fbm_obj$ntips], all_states[1:fbm_obj$ntips],)
 		plot(NULL, xlim=c(root_age, 0), ylim=c(min(all_states), max(all_states)),
 			xlab="Time", ylab="Trait")
+         
 		for (indx in (ntips+1):(ntips*2-1)){	
 			i = which(D[,1]==indx)
 			anc_ind <- D[i,1];
@@ -1474,26 +1509,28 @@ simulate_trait_data <- function(fbm_obj, sigma2=0.2, mu0=0, a0=0,
 			b_ind   <- D[i,3];  # index of descendants
 			vpa	 <- D[i,4];  # br length
 			vpb	 <- D[i,5];  # br length
+            
 			anc = all_states[anc_ind]
 			x0 = root_age + root_dist[anc_ind]
 			x1 = root_age + root_dist[a_ind]
-			segments(x0, anc, x1, all_states[a_ind])
+			segments(x0, anc, x1, all_states[a_ind], col=edge_cols[a_ind])
 			x1 = root_age + root_dist[b_ind]
-			segments(x0, anc, x1, all_states[b_ind])
+			segments(x0, anc, x1, all_states[b_ind], col=edge_cols[b_ind])
 		
 		}
-		t = seq(-root_age*0.5,root_age*0.5,length.out=100) - (root_age/2)
-		time_axis = seq(0,root_age,length.out=100)
+        if (sum(a0) > 0){
+    		t = seq(-root_age*0.5,root_age*0.5,length.out=100) - (root_age/2)
+    		time_axis = seq(0,root_age,length.out=100)
 		
-		trend = a0*t + mu0
-		par(mar=c(4,4,1,1)*1.2)
-		par(fig=c(0,10,0,4)/10)
-		par(new=T)
+    		trend = a0*t + mu0
+    		par(mar=c(4,4,1,1)*1.2)
+    		par(fig=c(0,10,0,4)/10)
+    		par(new=T)
 		
-		plot(NULL, xlim=c(root_age, 0), ylim=c(-1, 1), xlab="Time", ylab="Trend")
-		points(time_axis, trend, type="l")
-		abline(h=0,lty=2, col="red")
-		
+    		plot(NULL, xlim=c(root_age, 0), ylim=c(-1, 1), xlab="Time", ylab="Trend")
+    		points(time_axis, trend, type="l")
+    		abline(h=0,lty=2, col="red")
+		}
 		if (plot_file != ""){
 			dev.off()
 		}
