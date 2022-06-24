@@ -560,7 +560,7 @@ run_mcmc <- function (fbm_obj,ngen = 100000, control = list(),useVCV=F, sample_f
 	                logfile="mcmc.log",update_sig_freq=0.5,dynamicPlot = F,
 	                bdmcmc_freq=0.75,useTrend=T,print_freq=100,constRate=F,linTrend=F,
 					per_branch_parameters=TRUE, log_anc_states=TRUE, 
-                    update_mu0=c(), estimate_HP=FALSE, rate_trend_hp=1,
+                    update_mu0=c(), estimate_HP=FALSE, estimate_HPmu0=FALSE, rate_trend_hp=1,
                     init_mu0=c()){
 					
 	tree <-      fbm_obj$tree
@@ -668,7 +668,10 @@ run_mcmc <- function (fbm_obj,ngen = 100000, control = list(),useVCV=F, sample_f
 		out_tmp = c(out_tmp, "root", tree$tip.label[ind_NA_taxa])
 	}
     if (estimate_HP){
-        out_tmp <- c(out_tmp, "sig2_hp","mu0_hp")
+        out_tmp <- c(out_tmp, "sig2_hp")
+    }
+    if (estimate_HPmu0){
+        out_tmp <- c(out_tmp, "mu0_hp")        
     }
     if (logfile != 0){
         cat(c(out_tmp, "\n"), sep="\t", file=logfile, append=F)
@@ -698,8 +701,10 @@ run_mcmc <- function (fbm_obj,ngen = 100000, control = list(),useVCV=F, sample_f
     print(c("LIKELIHOOD:", sum(L), length(L), a, y[1:3], sig2, mu0,sum(ind_sig2), sum(ind_mu0)))
     sd_mu0 = 0.1 
 	Pr <- calc_prior(sig2, a, y,mu0, a0, prior_tbl, rate_sig2, sd_mu0)
-    if (estimate_HP){
+    if (estimate_HPmu0){
         Pr <- Pr + dexp(sd_mu0, rate_trend_hp, log=T) # add HP probability
+    }
+    if (estimate_HP){
         Pr <- Pr + dexp(rate_sig2, 1, log=T)
     }
 	
@@ -802,12 +807,14 @@ run_mcmc <- function (fbm_obj,ngen = 100000, control = list(),useVCV=F, sample_f
 			else{ # ROOT STATE
 				a.prime <- a + rnorm(n = 1, sd = 0.5) #sqrt(con$prop[j + 1]))
                 if (estimate_HP){
-    				sd_mu0_update <-  update_multiplier_proposal(sd_mu0, 1.05)
-    				sd_mu0.prime <- sd_mu0_update[1]
-                    hastings <- hastings + sd_mu0_update[2]
                     rate_sig2_update <- update_multiplier_proposal(rate_sig2, 1.05)
                     rate_sig2.prime <- rate_sig2_update[1]
                     hastings <- hastings + rate_sig2_update[2]
+                }
+                if (estimate_HPmu0){
+    				sd_mu0_update <-  update_multiplier_proposal(sd_mu0, 1.05)
+    				sd_mu0.prime <- sd_mu0_update[1]
+                    hastings <- hastings + sd_mu0_update[2]
                 }
 			}
 			
@@ -867,11 +874,12 @@ run_mcmc <- function (fbm_obj,ngen = 100000, control = list(),useVCV=F, sample_f
 	       # calc post
 		L.prime <- newlnLike(fbm_obj, c(x, a.prime, y.prime), sig2.prime[ind_sig2],mu0.prime[ind_mu0],a0.prime[ind_mu0])			
 		Pr.prime <- calc_prior(sig2.prime, a.prime, y.prime, mu0.prime, a0.prime, prior_tbl, rate_sig2.prime, sd_mu0.prime)
-        if (estimate_HP){
+        if (estimate_HPmu0){
             Pr.prime <- Pr.prime + dexp(sd_mu0.prime,
                                         rate=rate_trend_hp, log=T)
-            Pr.prime <- Pr.prime + dexp(rate_sig2.prime, 1, log=T)
-                                        
+        }
+        if (estimate_HP){
+            Pr.prime <- Pr.prime + dexp(rate_sig2.prime, 1, log=T)            
         }
 		
         # print( c(sum(L.prime), sum(Pr.prime), sig2.prime, a.prime, mu0.prime, x[ind_NA_taxa], sum(Pr), sum(L)) )
@@ -899,10 +907,12 @@ run_mcmc <- function (fbm_obj,ngen = 100000, control = list(),useVCV=F, sample_f
 			}else{
 				anc_tmp = c(a)
 			}
+            x_imputed_looged = x_imputed
             if (estimate_HP){
-                x_imputed_looged = c(x_imputed, rate_sig2, sd_mu0)
-            }else{
-                x_imputed_looged = x_imputed
+                x_imputed_looged = c(x_imputed_looged, rate_sig2)
+            }
+            if (estimate_HPmu0){
+                x_imputed_looged = c(x_imputed_looged, sd_mu0)
             }
             
 			
