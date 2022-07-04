@@ -1482,7 +1482,7 @@ simulate_trait_data <- function(fbm_obj, sigma2=0.2, mu0=0, a0=0,
     
 	if (plot){
 		if (plot_file != ""){
-			pdf(file=plot_file, 18,8.5)
+			pdf(file=plot_file, 18,18)
 		}
         if (sum(a0) > 0){
     		par(mar=c(2,4,1,1)*1.2)
@@ -1546,6 +1546,11 @@ simulate_trait_data <- function(fbm_obj, sigma2=0.2, mu0=0, a0=0,
 		}
 		
 	}
-	return(all_states)
+    tip_states = all_states[1:ntips]
+    names(tip_states) <- names(fbm_obj$data)
+    res <- NULL
+    res$tip_states <- tip_states
+    res$all_states <- all_states
+	return(res)
 }	
 	
