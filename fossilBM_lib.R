@@ -1423,7 +1423,8 @@ get_r2_mse <-function(x,y){
 
 
 simulate_trait_data <- function(fbm_obj, sigma2=0.2, mu0=0, a0=0, 
-                                plot=F, seed=0, plot_file="",color_by_mu0=T
+                                plot=F, seed=0, plot_file="",color_by_mu0=T,
+                                randomize_mu0=NULL
                                 ){
 	if (seed > 0){
 		set.seed(seed)
@@ -1443,6 +1444,13 @@ simulate_trait_data <- function(fbm_obj, sigma2=0.2, mu0=0, a0=0,
     sigma2 <- sigma2[fbm_obj$ind_sig2]
     mu0 <- mu0[fbm_obj$ind_mu0]
     a0 <- a0[fbm_obj$ind_mu0]
+    
+    if (length(randomize_mu0) > 0){
+        for (i in 1:length(unique(fbm_obj$ind_mu0))){
+            ind_tmp <- which(fbm_obj$ind_mu0 == i)
+            mu0[ind_tmp] <- mu0[ind_tmp] + rnorm(length(ind_tmp), 0, randomize_mu0[i])
+        }
+    }
     
 	
 	for (indx in (ntips+1):(ntips*2-1)){
@@ -1551,6 +1559,9 @@ simulate_trait_data <- function(fbm_obj, sigma2=0.2, mu0=0, a0=0,
     res <- NULL
     res$tip_states <- tip_states
     res$all_states <- all_states
+    res$sigma2 <- sigma2
+    res$mu0 <- mu0
+    res$a0 <- a0
 	return(res)
 }	
 	
