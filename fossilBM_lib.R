@@ -286,10 +286,8 @@ calc_prior <- function(sig2, a, y, mu0, delta_a0, prior_tbl, rate_sig2, sd_mu0) 
 }
 
 set_model_partitions <- function(fbm_obj,ind_sig2,ind_mu0){
-	ind_sig2 <- rep(1, fbm_obj$tree$Nnode * 2 - 1)
-	ind_mu0  <- rep(1, fbm_obj$tree$Nnode * 2 - 1)
-	
-	
+    # ind_sig2 <- rep(1, fbm_obj$tree$Nnode * 2 - 1)
+    # ind_mu0  <- rep(1, fbm_obj$tree$Nnode * 2 - 1)
 	tbl = read.table(fbm_obj$PartitionFile,h=F,stringsAsFactors=F,fill=T)
 	for (i in 1:dim(tbl)[1]){
 		tx_tmp = as.vector(unlist(tbl[i,]))
