@@ -17,4 +17,4 @@ The BM model with time-varying trend is described in [Zhang et al. 2022 Systemat
 Two versions of the fossilBM model are available: version.1 is launched from a terminal window using `RScript mcmcFossilBM.R [additional commands]`. A newer implementation loads all the necessary functions from the file `fossilBM_lib.R` and can be run more interactively from an R console. Current and future developments of fossilBM are implemented in `fossilBM_lib.R` only. 
 
 
-The following libraries are required to run FossilBM (`fossilBM_lib.R`): scales, phytools, geiger, adephylo. An example of a fossilBM setup is available in the file `run_FBM.R`. 
+The following libraries are required to run FossilBM (`fossilBM_lib.R`): scales, phytools, geiger, adephylo, plotrix. An example of a fossilBM setup is available in the file `run_FBM.R`. 
