@@ -8,13 +8,15 @@ The algorithm simultaneously estimates:
 2. the trends of phenotypic evolution and their variation across clades  
 3. the ancestral states at all internal nodes
 
+An example of a fossilBM setup and analysis is available in the file [`run_FBM.R`](https://github.com/dsilvestro/fossilBM/blob/master/run_FBM.R). 
+
 
 The methods implemented here are described in [Silvestro et al. 2018 Systematic Biology](https://doi.org/10.1093/sysbio/syy046).
 The BM model with time-varying trend is described in [Zhang et al. 2022 Systematic Biology](https://doi.org/10.1093/sysbio/syab065).  
+The BM model with constrained trend paramenbters is described in [Farina et al. 2023 Proc Roy Soc B](https://doi.org/10.1098/rspb.2023.1099). 
   
 
 #### NOTE
-Two versions of the fossilBM model are available: version.1 is launched from a terminal window using `RScript mcmcFossilBM.R [additional commands]`. A newer implementation loads all the necessary functions from the file `fossilBM_lib.R` and can be run more interactively from an R console. Current and future developments of fossilBM are implemented in `fossilBM_lib.R` only. 
+The following libraries are required to run FossilBM (`fossilBM_lib.R`): scales, phytools, geiger, adephylo, plotrix. 
+Older versions of fossilBM model are available [here](https://github.com/dsilvestro/fossilBM/releases/tag/v0.2). 
 
-
-The following libraries are required to run FossilBM (`fossilBM_lib.R`): scales, phytools, geiger, adephylo, plotrix. An example of a fossilBM setup is available in the file `run_FBM.R`. 
