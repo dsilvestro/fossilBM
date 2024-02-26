@@ -559,7 +559,7 @@ run_mcmc <- function (fbm_obj,ngen = 100000, control = list(),useVCV=F, sample_f
 	                bdmcmc_freq=0.75,useTrend=T,print_freq=100,constRate=F,linTrend=F,
 					per_branch_parameters=TRUE, log_anc_states=TRUE, 
                     update_mu0=c(), estimate_HP=FALSE, estimate_HPmu0=FALSE, rate_trend_hp=1,
-                    init_mu0=c()){
+                    init_mu0=c(), verbose=FALSE){
 					
 	tree <-      fbm_obj$tree
 	x <-         fbm_obj$data
@@ -615,7 +615,7 @@ run_mcmc <- function (fbm_obj,ngen = 100000, control = list(),useVCV=F, sample_f
         ind_mu0 <- r_tmp[[3]]
         part_mu_ids <- sort(unique(ind_mu0))	
         
-        print(head(ind_mu0))
+        # print(head(ind_mu0))
     }
     
     if (length(init_mu0) > 0){
@@ -623,14 +623,16 @@ run_mcmc <- function (fbm_obj,ngen = 100000, control = list(),useVCV=F, sample_f
     }
     
 	#names(ind_sig2) = c(names(x), D[-1,1])
-    print(table(ind_sig2))
-    print(table(ind_mu0))
+    if (verbose){
+        print(table(ind_sig2))
+        print(table(ind_mu0))    
+    }
     
     x_tmp = as.vector(table(ind_mu0))
     scaler_w = 1/(1 + log(x_tmp- min(x_tmp) +1))
     std_mu0 <- sd(fbm_obj$data, na.rm=T)*0.025 * scaler_w
     rate_sig2 <- 0.5
-    print(c("std_mu0", std_mu0))
+    # print(c("std_mu0", std_mu0))
         
     fbm_obj$ind_sig2 = ind_sig2
     fbm_obj$ind_mu0 = ind_mu0
@@ -696,7 +698,7 @@ run_mcmc <- function (fbm_obj,ngen = 100000, control = list(),useVCV=F, sample_f
 	y = runGibbs(fbm_obj,sig2[ind_sig2], c(x, a, y),mu0[ind_mu0],a0[ind_mu0],get_expected=1)[-1]
 	
 	L   <- newlnLike(fbm_obj, c(x, a, y), sig2[ind_sig2],mu0[ind_mu0],a0[ind_mu0])
-    print(c("LIKELIHOOD:", sum(L), length(L), a, y[1:3], sig2, mu0,sum(ind_sig2), sum(ind_mu0)))
+    # print(c("LIKELIHOOD:", sum(L), length(L), a, y[1:3], sig2, mu0,sum(ind_sig2), sum(ind_mu0)))
     sd_mu0 = 0.1 
 	Pr <- calc_prior(sig2, a, y,mu0, a0, prior_tbl, rate_sig2, sd_mu0)
     if (estimate_HPmu0){
@@ -1120,7 +1122,7 @@ return(rr$par)
 
 
 
-plot_results <- function(fbm_obj, logfile, resfile="results.pdf" , exp_trait_data=0, return_estimated_prm=FALSE){	
+plot_results <- function(fbm_obj, logfile, resfile="results.pdf" , exp_trait_data=0, return_estimated_prm=FALSE, width=15, height=15){	
 	require(phytools)
 	require(methods)
 	library(scales)
@@ -1129,7 +1131,7 @@ plot_results <- function(fbm_obj, logfile, resfile="results.pdf" , exp_trait_dat
 	ind_sig2_col = grep('sig2_', colnames(out_tbl), value=F)
 	burnin= round(0.25*dim(out_tbl)[1])
 
-	pdf(file=resfile,width=15*1.75, height=25*6.75)
+	pdf(file=resfile,width=width, height=height)
 
 	tree <- fbm_obj$tree
 	ntips <- fbm_obj$ntips
@@ -1342,7 +1344,7 @@ plot_res_trend <-function(res,time_axis, ylab,main=""){
 
 
 
-plot_time_varying_trend <- function(fbm_obj, logfile, resfile="trends.pdf"){
+plot_time_varying_trend <- function(fbm_obj, logfile, resfile="trends.pdf", height=15, width=10){
 	out_tbl = read.table(logfile,header=T)
 	ind_mu0_col = grep('mu0_', colnames(out_tbl), value=F)
 	ind_a0_col = grep('a0_', colnames(out_tbl), value=F)
@@ -1354,7 +1356,7 @@ plot_time_varying_trend <- function(fbm_obj, logfile, resfile="trends.pdf"){
 	mu0_temp_mean = unique(apply(out_tbl[, ind_mu0_col],FUN=mean,2))
 	a0_temp_mean = unique(apply(out_tbl[, ind_a0_col],FUN=mean,2))
 	
-	pdf(file=resfile,width=15*0.75, height=10*0.75)
+	pdf(file=resfile,width=width, height=height)
 	par(mfrow = c(length(mu0_temp_mean),2))
 	
 	t = seq(-root_age*0.5,root_age*0.5,length.out=1000)
