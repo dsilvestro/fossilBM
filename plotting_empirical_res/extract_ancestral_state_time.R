@@ -4,12 +4,7 @@ library(phangorn)
 library(phytools)
 library(scales)
 
-#setwd("/Volumes/DSILVESTRO/data/fossilizedBM/EMPIRICAL_ANALYSIS/FBM20170316/latitude/")
-#setwd("/Volumes/DSILVESTRO 1/platy_log_files/bodymass")
-setwd("/Users/danielesilvestro/Desktop/platy_log_files/bodymass")
-setwd("/Users/danielesilvestro/Desktop/platy_log_files/latitude")
-setwd("/Users/danielesilvestro/Desktop/platy_log_files/bodymass_nofoss")
-setwd("/Users/danielesilvestro/Desktop/platy_log_files/latitude_nofoss")
+setwd("your_working_directory")
 rda_files <- list.files(pattern=".rda")
 log_files <- list.files(pattern=".log")
 

@@ -788,7 +788,11 @@ run_mcmc <- function (fbm_obj,ngen = 100000, control = list(),useVCV=F, sample_f
 				hastings = sig2_update[2]			
 			}
 			else if (rr[2]<0.66 && useTrend==T){ # MU0 UPDATE
-				m_ind  = sample(update_mu0,1) #<---- ONLY UPDATE thise within update_mu0
+                if (length(update_mu0) == 1){
+                    m_ind = update_mu0[1]
+                }else{
+                    m_ind  = sample(update_mu0,1) #<---- ONLY UPDATE thise within update_mu0
+                }
 				mu0_update <-  mu0[m_ind] + rnorm(n = 1, sd = std_mu0[m_ind])
 				if (linTrend){
 					# update diff
