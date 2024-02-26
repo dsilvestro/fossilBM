@@ -8,7 +8,7 @@ datafile <- "platyrrhine_bodymass.txt"
 source("fossilBM_lib.R")
 
 # process and match input data 
-fbm_obj <- read_and_transform_data(treefile, datafile, log_trait_data=10)
+fbm_obj <- read_and_transform_data(treefile, datafile, tindex=tindex, log_trait_data=10)
 # Optional arguments:
 # log_trait_data = 0 # if set to 0 trait is not log trnsformed
 # drop_na = FALSE # if set to TRUE NAs will be dropped otherwise they are inputed
