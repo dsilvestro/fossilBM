@@ -13,26 +13,27 @@ read_and_transform_data <- function(treefile="", datafile="", tree_obj="", data_
 		
 		if (treefile != ""){
 			t<- read.nexus(treefile)
-			if (class(t)=="phylo") { 
-				t <- t
-				t$edge.length <- t$edge.length + zero_br
-				original_simulated_tree <-t 
-				name_tag=""
-				} 
-
-			if (class(t) == "multiPhylo") { 
-				t <- t[[tindex]]
-				original_simulated_tree <-t
-				t$edge.length <- t$edge.length + zero_br
-				name_tag=paste("_tree_",tindex, sep="")
-				} 
 		}
 		
-		if (tree_obj[1] != ""){
-			t = tree_obj
+		if (class(t)=="phylo") { 
+			t <- t
 			t$edge.length <- t$edge.length + zero_br
+			original_simulated_tree <-t 
 			name_tag=""
-		}
+			} 
+
+		if (class(t) == "multiPhylo") { 
+			t <- t[[tindex]]
+			original_simulated_tree <-t
+			t$edge.length <- t$edge.length + zero_br
+			name_tag=paste("_tree_",tindex, sep="")
+			} 
+        #
+        # if (tree_obj[1] != ""){
+        #     t = tree_obj
+        #     t$edge.length <- t$edge.length + zero_br
+        #     name_tag=""
+        # }
 
 		if (rm_extinct) {
 			name_tag = paste(name_tag,"_noFossil_",sep="")
