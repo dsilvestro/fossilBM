@@ -15,15 +15,15 @@ read_and_transform_data <- function(treefile="", datafile="", tree_obj="", data_
 			t<- read.nexus(treefile)
 		}
 		
-		if (class(t)=="phylo") { 
-			t <- t
+		if (class(tree_obj)=="phylo") { 
+			t <- tree_obj
 			t$edge.length <- t$edge.length + zero_br
 			original_simulated_tree <-t 
 			name_tag=""
 			} 
 
-		if (class(t) == "multiPhylo") { 
-			t <- t[[tindex]]
+		if (class(tree_obj) == "multiPhylo") { 
+			t <- tree_obj[[tindex]]
 			original_simulated_tree <-t
 			t$edge.length <- t$edge.length + zero_br
 			name_tag=paste("_tree_",tindex, sep="")
