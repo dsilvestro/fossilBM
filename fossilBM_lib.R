@@ -309,14 +309,16 @@ set_model_partitions <- function(fbm_obj,ind_sig2,ind_mu0){
 
 set_model_trait_partitions <- function(fbm_obj){
 	ind_mu0  <- fbm_obj$StateTbl[,2]
-    
-    
 	mu0  <- rep(0, length(unique(ind_mu0)))
 	a0  <-  rep(0, length(unique(ind_mu0)))
 	return( list(mu0, a0, ind_mu0) )
 }
 
-
+set_model_trait_partitions_sigma <- function(fbm_obj){
+	ind_sig2  <- fbm_obj$StateTbl[,2]
+	sig2  <- rep(0.05, length(unique(ind_sig2)))
+	return( list(sig2, ind_sig2) )
+}
 
 
 ################ BDMCMC SAMPLER
@@ -609,6 +611,7 @@ run_mcmc <- function (fbm_obj,ngen = 100000, control = list(),useVCV=F, sample_f
 
 
     if (length(fbm_obj$StateTbl) > 0){
+        bdmcmc_freq = 0
         r_tmp <- set_model_trait_partitions(fbm_obj)
         mu0 <- r_tmp[[1]]
         # mu0 = c(0, 0.1, 0.2, 0.3)
@@ -616,7 +619,22 @@ run_mcmc <- function (fbm_obj,ngen = 100000, control = list(),useVCV=F, sample_f
         ind_mu0 <- r_tmp[[3]]
         part_mu_ids <- sort(unique(ind_mu0))	
         
-        # print(head(ind_mu0))
+        print(head(ind_mu0))
+        print(mu0)
+        
+        if (PartitionFile == ""){
+            r_tmp <- set_model_trait_partitions_sigma(fbm_obj)
+            sig2 <- r_tmp[[1]]
+            ind_sig2  <- r_tmp[[2]]
+            part_ids <- sort(unique(ind_sig2))	
+            # print(c("part_ids", part_ids))
+            
+        }
+        
+        PartitionFile = "TraitPartition"
+        
+        
+        
     }
     
     if (length(init_mu0) > 0){
