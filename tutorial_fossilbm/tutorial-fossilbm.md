@@ -86,7 +86,7 @@ data_obj=datafile, state_tbl=state_tbl, z_tranform=TRUE)
 ````
 Arguments for ````read_and_transform_data```` function include:
 
-|  Argument            |  Function                                                                                                 |
+|  Argument            |  What it does                                                                                                |
 |---------------------:|-----------------------------------------------------------------------------------------------------------|
 |_log_trait_data_      |if set to 0 trait is not log-transformed                                                                   |
 |_drop_na_             |if set to TRUE NAs will be dropped otherwise they are imputed                                              |
@@ -109,7 +109,7 @@ res <- run_mcmc(fbm_obj, logfile=output_file,
 
 Other optional arguments for ````run_mcmc```` function include:
 
-|  Argument     |  Function                                                                                                          |
+|  Argument     |  What it does                                                                                                          |
 |--------------:|--------------------------------------------------------------------------------------------------------------------|
 |_useTrend_     |set to FALSE to run a BM model with no trend                                                                        |
 |_constRate_    |set to TRUE to run a BM model with constant rates (but variable trends)                                             |
