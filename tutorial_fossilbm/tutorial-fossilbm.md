@@ -75,14 +75,6 @@ Let's create a FossilBM abject with the input data:
 ````R
 fbm_obj <- read_and_transform_data(tree_obj=tree, 
 data_obj=datafile, state_tbl=state_tbl, z_tranform=TRUE)
-
-# Optional arguments:
-# log_trait_data = 0 # if set to 0 trait is not log trnsformed
-# drop_na = FALSE # if set to TRUE NAs will be dropped otherwise they are inputed
-# rescale_trait_data = 1 # multiplier to rescale the trait data
-# root_calibration = c(0,100) # normal prior (mean,sd) on root state
-# partition_file = clade_partitions.txt # assume independent rate and trends parameters for each partition 
-# (rates and trends are constant within)
 ````
 Arguments for ````read_and_transform_data```` function include:
 
@@ -94,7 +86,7 @@ Arguments for ````read_and_transform_data```` function include:
 |_root_calibration_    |normal prior (mean,sd) on root state                                                                       |
 |_partition_file_      |independent rate and trends parameters for each partition (example [here](https://github.com/dsilvestro/fossilBM/tree/master/example_files))
 
-And we can ran the MCMC:
+And we can run the MCMC:
 
 ````R
 output_file <- "fbm_mcmc.log"
