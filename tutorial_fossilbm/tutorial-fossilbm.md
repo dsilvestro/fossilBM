@@ -68,7 +68,7 @@ colnames(tip_state_tbl) = colnames(anc_state_trait)
 state_tbl <- rbind(tip_state_tbl, anc_state_trait[2:dim(anc_state_trait)[1],])
 ````
 
-## FossilBM analysus
+## FossilBM analysis
 Now you should be able run FossilBM using the states prepared above!  
 Let's create a FossilBM abject with the input data:
 
