@@ -12,7 +12,7 @@ read_and_transform_data <- function(treefile="", datafile="", tree_obj="", data_
                                     state_tbl=c(), z_tranform=FALSE){
 		
 		if (treefile != ""){
-			t<- read.nexus(treefile)
+			tree_obj <- read.nexus(treefile)
 		}
 		
 		if (class(tree_obj)=="phylo") { 
